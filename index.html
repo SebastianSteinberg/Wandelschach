@@ -3012,6 +3012,28 @@ function makeGameCode(){
 }
 
 /* --- kompakte Zustandsuebertragung --- */
+function packStateRaw(){
+  const b = [];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p = S.board[r][c];
+    if(!p) continue;
+    b.push([r, c, p.type, p.color, p.tags && Object.keys(p.tags).length ? p.tags : 0]);
+  }
+  const hand = col => S.hand[col].map(cd=>[cd.id, cd.ready?1:0]);
+  return {
+    v:1, t:'state', seq:0, from:onlineColor, lg:[], nc:null,
+    b, turn:S.turn,
+    k:[S.kristalle.w, S.kristalle.b],
+    hw:hand('w'), hb:hand('b'),
+    deck:S.deck.map(c=>c.id), disc:S.discard.map(c=>c.id),
+    lv:[S.lostValue.w, S.lostValue.b],
+    cp:[S.capturedPawns.w, S.capturedPawns.b],
+    au:S.abilitiesUsed, fl:S.flags,
+    pc:S.playedCardThisTurn?1:0,
+    go:S.gameOver||0, ci:S.checkInfo||0
+  };
+}
+
 function packState(){
   const b = [];
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){
@@ -3094,6 +3116,7 @@ async function onlinePost(payload){
 async function onlineSend(){
   if(!onlineCode) return;
   await onlinePost(packState());
+  onlineSaveSession();
 }
 
 async function onlineHello(){
@@ -3126,19 +3149,29 @@ async function onlinePoll(){
 
       if(d.seq <= onlineSeenSeq) return;            // schon gesehen
       onlineSeenSeq = d.seq;
-      const before = cloneBoard(S.board);
-      unpackState(d);
-      // Ticker-Zeilen des Gegners uebernehmen (aelteste zuerst einfuegen)
-      if(Array.isArray(d.lg)) d.lg.slice().reverse().forEach(l=>log(l));
-      onlineLogMark = S.log.length;
-      showOpponentMove(before, S.board, opp(onlineColor));
-      if(d.nc) S.botCardNotice = {color: opp(onlineColor), name: d.nc.name, desc: d.nc.desc};
-      render();
+      playOpponentUpdate(d);
     });
     onlineStatus = 'verbunden';
   }catch(e){
     onlineStatus = 'offline?';
   }
+}
+
+function boardFromMsg(d){
+  const b = Array.from({length:8},()=>Array(8).fill(null));
+  (d.b||[]).forEach(([r,c,type,color,tags])=>{ b[r][c] = {type, color, tags: tags||{}}; });
+  return b;
+}
+
+function findMoveDiff(before, after, foe){
+  let from=null, to=null;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const a=before[r][c], b=after[r][c];
+    const wasFoe = a && a.color===foe, isFoe = b && b.color===foe;
+    if(wasFoe && !isFoe) from = {r,c,piece:a};
+    if(isFoe && (!a || a.type!==b.type || a.color!==b.color)) to = {r,c,piece:b};
+  }
+  return {from, to};
 }
 
 /* Vergleicht altes und neues Brett und zeigt den gegnerischen Zug
@@ -3155,6 +3188,83 @@ function showOpponentMove(before, after, foe){
   const gType = actsAsRook(to.piece) ? 'R' : to.piece.type;
   const glyph = GLYPH[foe] ? GLYPH[foe][gType] : null;
   markBotPlacement(to.r, to.c, from?from.r:null, from?from.c:null, glyph);
+}
+
+/* --- Sitzung ueber ein Neuladen der Seite hinweg sichern --- */
+const ONLINE_STORE = 'wandelschach-session';
+
+function onlineSaveSession(){
+  if(!onlineCode) return;
+  try{
+    const data = {
+      code: onlineCode, color: onlineColor,
+      seq: onlineSeq, seen: onlineSeenSeq,
+      ts: Date.now(),
+      state: packStateRaw()
+    };
+    localStorage.setItem(ONLINE_STORE, JSON.stringify(data));
+  }catch(e){ /* Speicher nicht verfuegbar - dann eben ohne Wiederaufnahme */ }
+}
+
+function onlineClearSession(){
+  try{ localStorage.removeItem(ONLINE_STORE); }catch(e){}
+}
+
+function onlineRestoreSession(){
+  let data = null;
+  try{ data = JSON.parse(localStorage.getItem(ONLINE_STORE) || 'null'); }catch(e){ return false; }
+  if(!data || !data.code) return false;
+  if(Date.now() - (data.ts||0) > 12*60*60*1000){ onlineClearSession(); return false; }
+
+  onlineCode = data.code;
+  onlineColor = data.color;
+  onlineSeq = data.seq || 0;
+  onlineSeenSeq = data.seen != null ? data.seen : -1;
+  onlineLastId = null;
+  onlineLogMark = 0; onlinePendingNotice = null;
+  botColor = null;
+  if(data.state) unpackState(data.state);
+  if(onlinePollTimer) clearInterval(onlinePollTimer);
+  onlinePollTimer = setInterval(onlinePoll, 2000);
+  log(`Partie ${onlineCode} wieder aufgenommen \u2013 du spielst ${onlineColor==='w'?'Weiß':'Schwarz'}.`);
+  onlineHello();        // Gegenseite informieren und ggf. frischen Stand anfordern
+  onlinePoll();
+  render();
+  return true;
+}
+
+/* Spielt den gegnerischen Zug sichtbar nach:
+   erst die ziehende Figur markieren, kurz warten, dann setzen -
+   genau wie beim Computergegner. */
+function playOpponentUpdate(d){
+  const foe = opp(onlineColor);
+  const before = cloneBoard(S.board);
+  const after  = boardFromMsg(d);
+  const {from, to} = findMoveDiff(before, after, foe);
+
+  const applyRest = ()=>{
+    unpackState(d);
+    if(Array.isArray(d.lg)) d.lg.slice().reverse().forEach(l=>log(l));
+    onlineLogMark = S.log.length;
+    if(to){
+      const gType = actsAsRook(to.piece) ? 'R' : to.piece.type;
+      const glyph = GLYPH[foe] ? GLYPH[foe][gType] : null;
+      markBotPlacement(to.r, to.c, from?from.r:null, from?from.c:null, glyph);
+    }
+    if(d.nc) S.botCardNotice = {color: foe, name: d.nc.name, desc: d.nc.desc};
+    onlineSaveSession();
+    render();
+  };
+
+  if(from){
+    // Schritt 1: Figur des Gegners hervorheben
+    S.selected = [from.r, from.c];
+    S.legalMoves = [];
+    render();
+    setTimeout(()=>{ S.selected = null; applyRest(); }, 700);
+  } else {
+    applyRest();
+  }
 }
 
 function onlineStart(code, color){
@@ -3196,6 +3306,7 @@ function copyGameCode(){
   }catch(e){
     log('Spielcode: ' + code + ' (bitte manuell notieren).');
   }
+  onlineSaveSession();
   render();
 }
 
@@ -3204,6 +3315,7 @@ function onlineLeave(){
   if(onlinePollTimer) clearInterval(onlinePollTimer);
   onlinePollTimer = null;
   onlineCode = null; onlineColor = null;
+  onlineClearSession();
   log('Online-Partie verlassen.');
   render();
 }
@@ -3612,6 +3724,7 @@ const _origDrawCard = drawCard;
 drawCard = function(color){ _origDrawCard(color); scheduleBot(); };
 
 newGame();
+try{ onlineRestoreSession(); }catch(e){}
 </script>
 </body>
 </html>
