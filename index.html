@@ -18,7 +18,6 @@
     --sel: #7fb69e;
     --dest: #d85a30;
     --green: #4bbf3a;
-    /* Feldgroesse: passt sich an Breite und Hoehe an, damit alles ohne Scrollen passt */
     --sq: min(11.2vw, calc((100vh - 330px) / 8), 44px);
     --blue: #378add;
     --amber: #ba7517;
@@ -325,6 +324,7 @@
     background:#d8d8d2; border:2px solid #b4b2a9; color:#5a5a56;
     cursor:pointer; transition: background .2s, border-color .2s, color .2s;
   }
+  .tb-bot-locked { opacity:0.35; cursor:not-allowed; }
   .tb-bot.tb-bot-on {
     background:#ffc9c9; border-color:#e88; color:#e01b1b;
     box-shadow: 0 0 7px rgba(224,27,27,0.45);
@@ -1755,9 +1755,11 @@ function renderTracker(){
 
 function renderTopBar(){
   const botOn = (typeof botColor!=='undefined' && botColor);
+  const botLocked = (typeof onlineCode!=='undefined' && onlineCode);
   return `<div class="topbar"><div class="topbar-main">
-    <button class="tb-bot${botOn?' tb-bot-on':''}" onclick="toggleBot()"
-      title="${botOn?'Computergegner AN (spielt Schwarz)':'Computergegner AUS'}">
+    <button class="tb-bot${botOn?' tb-bot-on':''}${botLocked?' tb-bot-locked':''}"
+      ${botLocked?'disabled':''} onclick="toggleBot()"
+      title="${botLocked?'Im Online-Spiel nicht verfügbar':(botOn?'Computergegner AN (spielt Schwarz)':'Computergegner AUS')}">
       <svg viewBox="0 0 24 24" width="22" height="22">
         <text x="12" y="18" text-anchor="middle" font-size="19" fill="currentColor">\u265F</text>
       </svg>
@@ -1959,8 +1961,15 @@ function toggleCardSelect(color, idx){
 function playSelectedCard(){
   const sc = S.selectedCard;
   if (!sc) return;
+  const cd = S.hand[sc.color][sc.index];
   S.selectedCard = null;
+  const handBefore = S.hand[sc.color].length;
   playCard(sc.color, sc.index);
+  // Im Online-Spiel erfaehrt der Gegner, welche Karte gespielt wurde
+  if (typeof onlineCode!=='undefined' && onlineCode && cd &&
+      (S.hand[sc.color].length < handBefore || S.mode)) {
+    onlinePendingNotice = {name: cd.name, desc: cd.desc};
+  }
   render();
 }
 
@@ -2992,6 +3001,8 @@ let onlineSeenSeq = -1;       // zuletzt uebernommener Zaehler der Gegenseite
 let onlinePollTimer = null;
 let onlineLastId = null;
 let onlineStatus = '';
+let onlineLogMark = 0;            // Stand des Tickers beim letzten Senden
+let onlinePendingNotice = null;   // zuletzt gespielte Karte (fuer den Gegner)
 
 function onlineTopic(){ return 'wandelschach-' + onlineCode; }
 
@@ -3009,11 +3020,17 @@ function packState(){
     b.push([r, c, p.type, p.color, p.tags && Object.keys(p.tags).length ? p.tags : 0]);
   }
   const hand = col => S.hand[col].map(cd=>[cd.id, cd.ready?1:0]);
+  // seit dem letzten Senden neu entstandene Ticker-Zeilen
+  const newLines = Math.max(0, S.log.length - onlineLogMark);
+  const lg = S.log.slice(0, Math.min(newLines, 8));
+  onlineLogMark = S.log.length;
+  const nc = onlinePendingNotice; onlinePendingNotice = null;
   return {
     v: 1,
     t: 'state',
     seq: ++onlineSeq,
     from: onlineColor,
+    lg, nc,
     b, turn: S.turn,
     k: [S.kristalle.w, S.kristalle.b],
     hw: hand('w'), hb: hand('b'),
@@ -3109,8 +3126,13 @@ async function onlinePoll(){
 
       if(d.seq <= onlineSeenSeq) return;            // schon gesehen
       onlineSeenSeq = d.seq;
+      const before = cloneBoard(S.board);
       unpackState(d);
-      log('Zug des Gegenspielers empfangen.');
+      // Ticker-Zeilen des Gegners uebernehmen (aelteste zuerst einfuegen)
+      if(Array.isArray(d.lg)) d.lg.slice().reverse().forEach(l=>log(l));
+      onlineLogMark = S.log.length;
+      showOpponentMove(before, S.board, opp(onlineColor));
+      if(d.nc) S.botCardNotice = {color: opp(onlineColor), name: d.nc.name, desc: d.nc.desc};
       render();
     });
     onlineStatus = 'verbunden';
@@ -3119,11 +3141,28 @@ async function onlinePoll(){
   }
 }
 
+/* Vergleicht altes und neues Brett und zeigt den gegnerischen Zug
+   mit derselben Animation wie beim Computergegner. */
+function showOpponentMove(before, after, foe){
+  let from=null, to=null;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const a=before[r][c], b=after[r][c];
+    const sameA = a && a.color===foe, sameB = b && b.color===foe;
+    if(sameA && !sameB) from = {r,c,piece:a};
+    if(sameB && (!a || a.type!==b.type || a.color!==b.color)) to = {r,c,piece:b};
+  }
+  if(!to) return;
+  const gType = actsAsRook(to.piece) ? 'R' : to.piece.type;
+  const glyph = GLYPH[foe] ? GLYPH[foe][gType] : null;
+  markBotPlacement(to.r, to.c, from?from.r:null, from?from.c:null, glyph);
+}
+
 function onlineStart(code, color){
   onlineCode = (code||'').trim().toUpperCase();
   if(!onlineCode) return;
   onlineColor = color;
   onlineSeq = 0; onlineSeenSeq = -1; onlineLastId = null;
+  onlineLogMark = 0; onlinePendingNotice = null;
   if(onlinePollTimer) clearInterval(onlinePollTimer);
   onlinePollTimer = setInterval(onlinePoll, 2000);
   botColor = null;                                  // Bot aus im Online-Spiel
@@ -3234,6 +3273,11 @@ let botColor = null;          // null = aus, 'b' = Bot spielt Schwarz
 let botBusy = false;
 
 function toggleBot(){
+  if (typeof onlineCode!=='undefined' && onlineCode) {
+    log('Im Online-Spiel ist der Computergegner nicht verfügbar.');
+    render();
+    return;
+  }
   botColor = botColor ? null : 'b';
   S.menuOpen = false;
   log(botColor ? 'Computergegner aktiviert (spielt Schwarz).' : 'Computergegner deaktiviert.');
