@@ -1,0 +1,3564 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Wandelschach</title>
+<style>
+  :root {
+    --anthrazit: #2c2c2a;
+    --anthrazit-2: #45443f;
+    --kupfer: #ba7517;
+    --kupfer-2: #e0a24a;
+    --cream: #f1efe8;
+    --paper: #faf9f5;
+    --line: #d3d1c7;
+    --light-sq: #f1efe8;
+    --dark-sq: #b4b2a9;
+    --sel: #7fb69e;
+    --dest: #d85a30;
+    --green: #4bbf3a;
+    --blue: #378add;
+    --amber: #ba7517;
+    --coral: #d85a30;
+    --danger: #b0342a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Iowan Old Style', 'Georgia', serif;
+    background: var(--paper);
+    color: var(--anthrazit);
+    padding: 0 10px 16px;
+  }
+  h1 {
+    font-size: 22px;
+    letter-spacing: 0.3px;
+    margin: 0 0 2px 0;
+    font-weight: 700;
+  }
+  .subtitle { color: #71706a; font-size: 13px; margin-bottom: 14px; font-family: -apple-system, sans-serif; }
+  .layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .board-col { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .tracker {
+    width:100%; max-width:420px; margin:5px auto 0;
+    background:transparent; border:0; border-radius:0; padding:0;
+    font-family: -apple-system, sans-serif;
+  }
+  .tracker-row { display:flex; justify-content:space-between; font-size:8.5px; font-weight:700; margin-bottom:2px; letter-spacing:.2px; }
+  .tracker-row span:first-child { color: var(--anthrazit); }
+  .tracker-row span:last-child { color: var(--kupfer); }
+  .tracker-bar-wrap { position:relative; }
+  .tracker-bar { position:relative; height: 13px; background: linear-gradient(90deg, #fdfdfb 0%, var(--cream) 50%, var(--kupfer) 100%); border:1px solid var(--line); border-radius:7px; overflow:hidden;}
+  .tracker-dangerzone {
+    position:absolute; top:0; bottom:0;
+    background-image: repeating-linear-gradient(45deg, rgba(176,52,42,0.8) 0px, rgba(176,52,42,0.8) 3px, transparent 3px, transparent 6px);
+  }
+  .tracker-dangerzone.active-blink { animation: dangerBlink 1s ease-in-out infinite; }
+  @keyframes dangerBlink {
+    0%, 100% { background-color: rgba(176,52,42,0); }
+    50% { background-color: rgba(176,52,42,0.45); }
+  }
+  .tracker-yellow-mark { position:absolute; top:0; bottom:0; width:2px; background:#f4c400; z-index:2; }
+  .tracker-lbl {
+    position:absolute; top:50%; transform:translateY(-50%);
+    font-size:8px; font-weight:700; letter-spacing:.2px;
+    color:#6f6e69; z-index:3; pointer-events:none; white-space:nowrap;
+  }
+  .tracker-lbl-l { left:28%; }
+  .tracker-lbl-r { right:28%; }
+  .tracker-marker { position:absolute; top:-3px; width:3px; height:20px; background:var(--danger); }
+  .tracker-scale { position:relative; height:9px; margin-top:3px; }
+  .tracker-scale span { position:absolute; top:0; transform:translateX(-50%); text-align:center; font-size:6.5px; color:#8a8880; line-height:1; white-space:nowrap; }
+  .tracker-scale span.zero { font-weight:800; color:var(--anthrazit); font-size:7.5px; }
+  .tracker-pop {
+    position:absolute; top:-24px; transform:translateX(-50%);
+    font-weight:800; font-size:15px; white-space:nowrap;
+    animation: popFade 1.3s ease-out forwards;
+    pointer-events:none;
+  }
+  @keyframes popFade {
+    0% { opacity:0; transform:translate(-50%, 6px) scale(0.75); }
+    15% { opacity:1; transform:translate(-50%, 0) scale(1.2); }
+    70% { opacity:1; transform:translate(-50%, -4px) scale(1); }
+    100% { opacity:0; transform:translate(-50%, -16px) scale(0.9); }
+  }
+  .board-pop {
+    position:absolute; top:-6px; left:50%; transform:translateX(-50%);
+    font-weight:900; font-size:24px; color:#4bbf3a; white-space:nowrap;
+    -webkit-text-stroke: 2px #0a3d2c;
+    paint-order: stroke fill;
+    text-shadow: 0 0 4px rgba(0,0,0,0.5);
+    animation: popFade 1.3s ease-out forwards;
+    pointer-events:none; z-index:6;
+  }
+  @keyframes popFadeCenter {
+    0% { opacity:0; transform:translate(-50%, calc(-50% + 8px)) scale(0.7); }
+    15% { opacity:1; transform:translate(-50%, -50%) scale(1.3); }
+    70% { opacity:1; transform:translate(-50%, calc(-50% - 6px)) scale(1); }
+    100% { opacity:0; transform:translate(-50%, calc(-50% - 26px)) scale(0.9); }
+  }
+  .center-pop {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-weight:900; font-size:44px; color:#4bbf3a; white-space:nowrap;
+    -webkit-text-stroke: 3px #0a3d2c;
+    paint-order: stroke fill;
+    text-shadow: 0 0 8px rgba(0,0,0,0.5);
+    animation: popFadeCenter 1.3s ease-out forwards;
+    pointer-events:none; z-index:30;
+  }
+  .board-wrap { position:relative; }
+  .reaction-overlay {
+    position:absolute; inset:0; z-index:40;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .reaction-box {
+    pointer-events:auto;
+    background: rgba(10,10,10,0.72);
+    backdrop-filter: blur(1px);
+    color:#fff; font-family:-apple-system, sans-serif; font-weight:700; font-size:13px;
+    text-align:center; padding:14px 16px; border-radius:10px;
+    max-width: 90%;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+  }
+  .reaction-box button {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.5);
+    backdrop-filter: blur(2px);
+  }
+  .reaction-box button.secondary {
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+  }
+  .win-overlay {
+    position:absolute; inset:0; z-index:50;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background: rgba(10,10,10,0.6); border-radius:6px; text-align:center; padding:10px;
+    overflow:hidden;
+  }
+  .win-crown {
+    font-size:96px; line-height:1;
+    filter: drop-shadow(0 0 14px gold) drop-shadow(0 0 26px #f4c400);
+    animation: crownPop 0.7s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes crownPop {
+    0% { transform: scale(0) rotate(-20deg); opacity:0; }
+    70% { transform: scale(1.25) rotate(6deg); opacity:1; }
+    100% { transform: scale(1) rotate(0deg); opacity:1; }
+  }
+  .win-text {
+    color:#fff; font-family:-apple-system, sans-serif; font-weight:800; font-size:18px;
+    margin-top:10px; text-shadow: 0 0 10px gold, 0 0 2px #000;
+    animation: crownPop 0.9s ease-out;
+  }
+  .win-end-buttons {
+    margin-top: 16px; display:flex; gap:10px;
+    animation: crownPop 0.4s ease-out;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 44px);
+    grid-template-rows: repeat(8, 44px);
+    border: 3px solid var(--anthrazit);
+    border-radius: 4px;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  .sq {
+    width:44px; height:44px;
+    display:flex; align-items:center; justify-content:center;
+    position: relative;
+    cursor: pointer;
+    font-size: 28px;
+    user-select: none;
+  }
+  .sq.light { background: var(--light-sq); }
+  .sq.dark { background: var(--dark-sq); }
+  .sq.selected { outline: 3px solid var(--sel); outline-offset:-3px; }
+  .sq.dest::after {
+    content:'';
+    position:absolute;
+    width:14px; height:14px;
+    border-radius:50%;
+    background: rgba(216,90,48,0.55);
+  }
+  .sq.dest-preview2::after {
+    content:'';
+    position:absolute;
+    width:14px; height:14px;
+    border-radius:50%;
+    background: rgba(244,196,0,0.75);
+  }
+  .sq.dest-capture { outline: 3px solid var(--dest); outline-offset:-3px; }
+  .sq.flash { outline: 3px solid gold; outline-offset:-3px; }
+  .piece-chip {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:39px; height:39px; border-radius:50%; font-size:24px; line-height:1;
+    position:relative; z-index:2;
+  }
+  .piece-chip span.glyph { display:inline-block; }
+  .piece-chip.type-P span.glyph { transform:translateY(0); }
+  .piece-chip.type-N span.glyph { transform:translateY(-3px); }
+  .piece-chip.type-B span.glyph { transform:translateY(-3px); }
+  .piece-chip.type-R span.glyph { transform:translateY(-2px); }
+  .piece-chip.type-Q span.glyph { transform:translateY(-2px); }
+  .piece-chip.type-K span.glyph { transform:translateY(-2px); }
+  .piece-chip.type-P { font-size:26px; }
+  .piece-chip.type-N { font-size:33px; }
+  .piece-chip.type-B { font-size:33px; }
+  .piece-chip.type-R { font-size:30px; }
+  .piece-chip.type-Q { font-size:32px; }
+  .piece-chip.type-K { font-size:32px; }
+  .piece-chip.piece-w { background: var(--cream); color: var(--anthrazit); border: 2px solid var(--anthrazit); }
+  .piece-chip.decoy-chip { background: transparent; border: none; color: #d4af37; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); }
+  .piece-chip.promoted-queen {
+    background: linear-gradient(145deg, #f4d76a, #d4af37);
+    border: 2px solid #8a6b10;
+    color: #4a3405;
+    box-shadow: 0 0 6px rgba(212,175,55,0.7);
+  }
+  .piece-chip.promoted-queen.active-turn { box-shadow: 0 0 0 3px #f4c400, 0 0 6px rgba(212,175,55,0.7); }
+  .piece-chip.piece-b { background: var(--kupfer); color: #2b1400; border: 2px solid #7a4c10; }
+  .piece-chip.active-turn { box-shadow: 0 0 0 3px #f4c400; transform: scale(0.85); }
+  @keyframes checkBlink {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(176,52,42,1); }
+    50% { box-shadow: 0 0 0 4px rgba(176,52,42,0.15); }
+  }
+  .piece-chip.in-check { animation: checkBlink 0.8s ease-in-out infinite; }
+  .shield-badge {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:34px; height:37px; z-index:5;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none; opacity:0.62;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+  }
+  .shield-badge svg { width:100%; height:100%; }
+  .blocked-badge {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:39px; height:39px; border-radius:50%; z-index:5;
+    border: 3px solid #b0342a;
+    background: rgba(176,52,42,0.18);
+    display:flex; align-items:center; justify-content:center;
+    color:#b0342a; font-weight:900; font-size:22px; line-height:1;
+    font-family:-apple-system, sans-serif;
+    pointer-events:none;
+  }
+  @keyframes shieldBlink {
+    0%, 100% { opacity:1; }
+    50% { opacity:0.25; }
+  }
+  .plus-badge {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-size:30px; font-weight:900; color:#4bbf3a; line-height:1;
+    text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 4px #256b18;
+    animation: shieldBlink 0.9s ease-in-out infinite;
+    pointer-events:none; z-index:3;
+  }
+  .sq.eligible-target { position:relative; }
+  .elig-fill {
+    position:absolute; inset:0px; border-radius:3px;
+    background: rgba(75,191,58,0.75);
+    animation: eligibleBlink 0.9s ease-in-out infinite;
+    pointer-events:none; z-index:1;
+  }
+  @keyframes eligibleBlink {
+    0%, 100% { opacity:1; }
+    50% { opacity:0.15; }
+  }
+  .ghost-pawn {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-size:26px; color:rgba(255,255,255,0.85);
+    text-shadow: 0 0 2px rgba(0,0,0,0.5);
+    animation: eligibleBlink 0.9s ease-in-out infinite;
+    pointer-events:none; z-index:4;
+  }
+  .upgrade-arrow {
+    position:absolute; top:-9px; right:-13px;
+    padding:2px 5px; border-radius:8px; white-space:nowrap;
+    background:#4bbf3a; border:2px solid #256b18; color:#fff;
+    font-size:10px; line-height:1.1; text-align:center; font-weight:900;
+    font-family:-apple-system, sans-serif;
+    cursor:pointer; z-index:7;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  }
+  .upgrade-arrow.disabled {
+    background:#9aa39f; border-color:#5f6764; color:#e8e8e8;
+    cursor:not-allowed; opacity:0.65;
+  }
+  .tag-badge {
+    position:absolute; bottom:1px; right:2px; font-size:9px; font-weight:700;
+    background: rgba(255,255,255,0.85); border-radius:3px; padding:0 2px; font-family: -apple-system, sans-serif;
+    color: var(--anthrazit); z-index:4;
+  }
+  .mini-crown {
+    position:absolute; top:-3px; left:50%; transform:translateX(-50%) rotate(0deg);
+    color: #d4af37; z-index:4;
+    display:flex;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5));
+  }
+  .mini-crown svg path, .mini-crown svg rect, .mini-crown svg circle {
+    stroke: #1a1a18; stroke-width: 0.8;
+  }
+  .topbar {
+    position:relative; z-index:150; display:block;
+    margin:0 -10px 10px; width:calc(100% + 20px);
+    background: var(--cream); border:0; border-bottom:1px solid var(--line);
+    border-radius:0; padding:6px 10px 7px;
+  }
+  .topbar-main {
+    position:relative; display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .tb-bot {
+    position:absolute; left:0; top:50%; transform:translateY(-50%);
+    width:38px; height:38px; border-radius:50%; padding:0; margin:0;
+    display:flex; align-items:center; justify-content:center;
+    background:#d8d8d2; border:2px solid #b4b2a9; color:#5a5a56;
+    cursor:pointer; transition: background .2s, border-color .2s, color .2s;
+  }
+  .tb-bot.tb-bot-on {
+    background:#ffc9c9; border-color:#e88; color:#e01b1b;
+    box-shadow: 0 0 7px rgba(224,27,27,0.45);
+  }
+  @keyframes botPlace {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.15); }
+    75%  { transform: scale(0.95); }
+    100% { transform: scale(1); }
+  }
+  .piece-chip.bot-placed { animation: botPlace 0.7s ease-in-out; }
+  .tb-parties { display:flex; gap:22px; align-items:center; }
+  .tb-partywrap { display:flex; align-items:center; gap:6px; }
+  .tb-partywrap.tb-mirror { flex-direction:row-reverse; }
+  .tb-cards { display:flex; align-items:center; gap:4px; }
+  .tb-partywrap.tb-mirror .tb-cards { flex-direction:row-reverse; }
+  .tb-slots { display:flex; flex-direction:column; gap:3px; }
+  .tb-draw {
+    position:relative; width:35px; height:52px; padding:0; margin:0;
+    border-radius:5px; border:1px solid #a8a69e;
+    background: linear-gradient(180deg, #fbfbf8 0%, #e6e5df 45%, #cfcec7 55%, #b9b8b1 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9),
+                inset 0 -2px 3px rgba(0,0,0,0.18),
+                0 2px 3px rgba(0,0,0,0.22);
+    color:#5f5e59; font-family:-apple-system,sans-serif; font-weight:900; font-size:20px;
+    line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition: transform .08s, box-shadow .08s, filter .15s;
+  }
+  .tb-draw:not(.tb-draw-dis):active {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.28), 0 1px 1px rgba(0,0,0,0.18);
+  }
+  .tb-draw-cost {
+    position:absolute; bottom:2px; right:3px;
+    font-size:9px; font-weight:800; color:#82817b;
+  }
+  .tb-draw-dis { opacity:0.45; cursor:not-allowed; }
+  /* Neon-Rand, sobald der Zug bezahlbar ist */
+  .tb-draw:not(.tb-draw-dis) {
+    border-color:#7cf06a;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9),
+                inset 0 -2px 3px rgba(0,0,0,0.18),
+                0 0 4px #4bbf3a, 0 0 9px rgba(75,191,58,0.75),
+                inset 0 0 3px rgba(124,240,106,0.6);
+  }
+  .tb-draw:not(.tb-draw-dis):active {
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.28), 0 0 4px #4bbf3a, 0 0 8px rgba(75,191,58,0.7);
+  }
+  @keyframes drawFlash {
+    0%   { background: linear-gradient(180deg,#7fe06a,#3ea62e); border-color:#256b18; color:#fff; }
+    60%  { background: linear-gradient(180deg,#a9ec9a,#6cc95c); border-color:#4bbf3a; color:#fff; }
+    100% { background: linear-gradient(180deg,#fbfbf8 0%,#e6e5df 45%,#cfcec7 55%,#b9b8b1 100%); border-color:#a8a69e; color:#5f5e59; }
+  }
+  .tb-draw-flash { animation: drawFlash 0.6s ease-out; }
+  .tb-slot {
+    position:relative; width:13px; height:18px; border-radius:3px;
+    background:#e2e2dc; border:1px solid #c2c2ba;
+  }
+  .tb-slot-filled {
+    background: repeating-linear-gradient(45deg,#f4c400 0 3px,#d9ad00 3px 6px);
+    border-color:#8a6b10;
+  }
+  .tb-slot-pop {
+    position:absolute; left:50%; top:-11px; transform:translateX(-50%);
+    font-family:-apple-system,sans-serif; font-size:9px; font-weight:900;
+    color:#4bbf3a; -webkit-text-stroke:1px #256b18; paint-order:stroke fill;
+    white-space:nowrap; animation: popFade 1.2s ease-out forwards; pointer-events:none;
+  }
+  .bot-ghost {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:39px; height:39px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; color:#3a3a38; filter:grayscale(1);
+    opacity:0.42; animation: ghostFade 1.3s ease-out forwards;
+    pointer-events:none; z-index:1;
+  }
+  @keyframes ghostFade {
+    0%   { opacity:0.42; }
+    35%  { opacity:0.30; }
+    100% { opacity:0; }
+  }
+  .tb-party { position:relative; display:flex; align-items:center; justify-content:center; border-radius:50%; padding:1px; }
+  .tb-party.tb-active { }
+  .tb-count {
+    position:absolute; bottom:-2px; right:-2px;
+    background:#fff; border:1px solid var(--line); border-radius:7px;
+    font-family:-apple-system, sans-serif; font-size:9px; font-weight:800;
+    padding:0 3px; color:var(--anthrazit);
+  }
+  .tb-menu-wrap { position:absolute; right:0; top:50%; transform:translateY(-50%); z-index:200; }
+  .tb-burger {
+    width:38px; height:38px; padding:0; margin:0; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:#d8d8d2; border:2px solid #b4b2a9; color:#5a5a56;
+    cursor:pointer; line-height:1;
+    transition: background .2s, border-color .2s, color .2s;
+  }
+  .tb-burger-lines { display:flex; flex-direction:column; gap:4px; }
+  .tb-burger-lines i {
+    display:block; width:20px; height:3px; border-radius:2px;
+    background:currentColor;
+  }
+  .tb-burger.tb-close {
+    background:var(--anthrazit); color:#fff; border-color:var(--anthrazit);
+    font-size:19px; font-weight:700;
+  }
+  .tb-menu {
+    position:absolute; right:0; top:44px; z-index:200;
+    background:#fff; border:1px solid var(--line); border-radius:8px;
+    padding:6px; display:flex; flex-direction:column; gap:4px; min-width:120px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.18);
+  }
+  .tb-menu button { margin:0; width:100%; }
+  .cardzone { position:relative; width:100%; max-width:378px; margin:4px auto 8px; }
+  .cardrow { display:flex; width:100%; margin:0; gap:10px; }
+  .cardrow-half { display:grid; grid-template-columns:repeat(3,1fr); grid-auto-rows:72px; gap:5px 4px; flex:1; justify-items:center; align-items:start; }
+  .cardfield {
+    width:100%; max-width:52px; height:72px; box-sizing:border-box;
+    border-radius:5px; position:relative; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; padding:3px;
+    font-family:-apple-system,sans-serif; overflow:hidden;
+    transition: transform .1s, box-shadow .1s;
+  }
+  .cardfield-empty {
+    background: rgba(120,118,112,0.10);
+    border:1px dashed #7a7872; cursor:default;
+  }
+  .cardfield[style*="background-image"] {
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+  }
+  .cardfield.type-Aufwertung { background-color:var(--green); border:1px solid #4a7a42; }
+  .cardfield.type-Aktion     { background-color:var(--coral); border:1px solid #8a4a32; }
+  .cardfield.type-Reaktion   { background-color:var(--blue);  border:1px solid #3f5f80; }
+  .cardfield.type-Ereignis   { background-color:var(--amber); border:1px solid #7d5f28; }
+  /* Nur spielbereite Karten leuchten wie ein LED-Band */
+  .cardfield-lit.type-Aufwertung { border-color:#7cf06a;
+    box-shadow: 0 0 4px #4bbf3a, 0 0 9px rgba(75,191,58,0.75), inset 0 0 3px rgba(124,240,106,0.6); }
+  .cardfield-lit.type-Aktion     { border-color:#ff9a72;
+    box-shadow: 0 0 4px #d85a30, 0 0 9px rgba(216,90,48,0.75), inset 0 0 3px rgba(255,154,114,0.6); }
+  .cardfield-lit.type-Reaktion   { border-color:#7cc4ff;
+    box-shadow: 0 0 4px #378add, 0 0 9px rgba(55,138,221,0.75), inset 0 0 3px rgba(124,196,255,0.6); }
+  .cardfield-lit.type-Ereignis   { border-color:#ffd166;
+    box-shadow: 0 0 4px #ba7517, 0 0 9px rgba(244,193,60,0.75), inset 0 0 3px rgba(255,209,102,0.6); }
+  .cardfield-dim { filter: saturate(0.75) brightness(0.9); }
+  .cardfield-name {
+    color:#fff; font-size:8.5px; font-weight:800; line-height:1.1;
+    text-align:center; text-shadow:0 1px 1px rgba(0,0,0,0.35);
+    word-break:break-word;
+  }
+  .cardfield-badge {
+    position:absolute; top:3px; right:3px; z-index:2;
+    display:flex; align-items:center; gap:1px;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+  }
+  .cardfield-badge b {
+    font-size:11px; font-weight:900; color:#fff; line-height:1;
+    text-shadow:0 0 2px #000, 0 1px 2px rgba(0,0,0,0.8);
+  }
+  .cardfield-wait { opacity:0.55; }
+  .cardfield-hidden {
+    background: repeating-linear-gradient(45deg,#8f8d86 0 5px,#7a7872 5px 10px);
+    border:1px solid #5f5e59; cursor:default;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,0.15);
+  }
+  .cardfield-back {
+    width:60%; height:60%; border-radius:3px;
+    border:1.5px dashed rgba(255,255,255,0.5);
+  }
+  .tb-cards { position:relative; }
+  .tb-cards .tb-slot-pop { left:auto; right:-4px; top:-9px; transform:none; }
+  .cardfield-sel {
+    outline:2px solid #f4c400; outline-offset:1px;
+    transform: translateY(-2px);
+  }
+  .msg-area.msg-card { background:rgba(255,255,255,0.96); border-color:var(--line); color:#4a4a46; }
+  .msg-play {
+    margin:0 0 0 6px; padding:2px 8px; font-size:10px;
+    background:var(--green); border-color:#256b18;
+  }
+  .orbrow {
+    position:relative; z-index:60;
+    display:flex; width:100%; max-width:378px; margin:6px auto 12px;
+    gap:10px; justify-content:center;
+  }
+  .orbmenu { flex:1; display:flex; justify-content:center; align-items:flex-end; position:relative; height:52px; }
+  .orb-field { position:relative; width:52px; height:52px; margin-bottom:-14px; }
+
+  .orb-center {
+    position:relative; width:52px; height:52px; border-radius:50%;
+    padding:0; margin:0; cursor:pointer; z-index:63;
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(180deg, #fbfbf8 0%, #e6e5df 45%, #cfcec7 55%, #b9b8b1 100%);
+    border:1px solid #a8a69e;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9),
+                inset 0 -2px 3px rgba(0,0,0,0.18),
+                0 2px 3px rgba(0,0,0,0.22);
+    transition: transform .12s, box-shadow .12s;
+  }
+  .orb-center:active { transform: translateY(1px); }
+  .orb-center-open {
+    background: linear-gradient(180deg, #4a4a46, #2c2c2a);
+    border-color:#1c1c1a; color:#fff;
+  }
+  .orb-star { position:relative; display:flex; align-items:center; justify-content:center; }
+  .orb-star b {
+    position:absolute; bottom:0px; right:-3px;
+    background:#fff; border:1px solid var(--line); border-radius:7px;
+    padding:0 3px; font-family:-apple-system,sans-serif; font-size:9px; font-weight:900;
+    color:#4a4a46; line-height:1.3;
+  }
+  .orb-x { font-size:19px; font-weight:700; color:#fff; }
+  .orb-star-alert b { color:#1c5a10; }
+  .orb-star-alert svg path { stroke: #4bbf3a; }
+
+  .orb-wrap {
+    position:absolute; top:50%; left:50%; margin:-23px 0 0 -23px;
+    display:flex; flex-direction:column; align-items:center; width:46px;
+    transition: transform .32s cubic-bezier(.34,1.4,.4,1), opacity .22s;
+    z-index:62;
+  }
+  .orb {
+    width:46px; height:46px; border-radius:50%; padding:0; margin:0; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; overflow:visible;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .orb-w { background: radial-gradient(circle at 35% 30%, #fff, #ddd9cd 75%); border:1px solid #b9b6a9; }
+  .orb-b { background: radial-gradient(circle at 35% 30%, #e2a44f, #ba7517 75%); border:1px solid #7a4c10; }
+  .orb-glyph {
+    font-size:22px; line-height:1;
+    width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  /* Unicode-Schachfiguren sind unterschiedlich hoch gezeichnet -
+     hier auf die optische Groesse des Bauern angeglichen */
+  .orb-g-K { font-size:33px; }
+  .orb-g-Q { font-size:33px; }
+  .orb-g-R { font-size:32px; }
+  .orb-g-B { font-size:33px; }
+  .orb-g-N { font-size:32px; }
+  .orb-g-P { font-size:24px; }
+  .orb-w .orb-glyph { color:#2c2c2a; }
+  .orb-b .orb-glyph { color:#3a2400; }
+  .orb-dis { opacity:0.42; cursor:not-allowed; }
+  .orb-used { filter:grayscale(1); }
+  .orb-used .orb-glyph { text-decoration:line-through; }
+  @keyframes orbGlow {
+    0%,100% { filter: drop-shadow(0 0 3px rgba(75,191,58,0.95)) brightness(1.06); }
+    50%     { filter: drop-shadow(0 0 8px rgba(75,191,58,1)) brightness(1.16); }
+  }
+  .orb-armed { animation: orbGlow 1.1s ease-in-out infinite; box-shadow: inset 0 0 0 2px #4bbf3a; }
+  .orb-i {
+    position:absolute; top:-6px; right:-2px; width:21px; height:21px; border-radius:50%;
+    background:#fff; border:1px solid var(--line); color:var(--anthrazit);
+    font-family:-apple-system,sans-serif; font-size:12px; font-weight:800;
+    line-height:19px; text-align:center; cursor:pointer; z-index:7;
+  }
+  .ticker-dot {
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:#e01b1b; margin-right:6px; vertical-align:middle;
+    box-shadow:0 0 5px rgba(224,27,27,0.9);
+    animation: tickerBlink 1.2s ease-in-out infinite;
+  }
+  @keyframes tickerBlink {
+    0%,100% { opacity:1; }
+    50% { opacity:0.2; }
+  }
+  .msg-area {
+    position:absolute; left:50%; top:-4px; transform:translateX(-50%);
+    width:96%; max-width:378px; height:auto; max-height:78px; box-sizing:border-box;
+    z-index:45; pointer-events:none;
+    font-family:-apple-system,sans-serif; font-size:10.5px; line-height:1.28;
+    padding:5px 9px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    background:transparent; border:1px solid transparent; color:transparent;
+    overflow-y:auto; overscroll-behavior:contain;
+    transition: background .15s, border-color .15s;
+  }
+  .msg-area > span { width:100%; }
+  .msg-area.msg-on {
+    background:rgba(255,255,255,0.95); border-color:var(--line); color:#4a4a46;
+    box-shadow:0 3px 10px rgba(0,0,0,0.22); pointer-events:auto;
+  }
+  .msg-tag {
+    color:#d4a017; font-weight:900; letter-spacing:.4px;
+    text-shadow:0 0 1px rgba(0,0,0,0.15);
+  }
+  .msg-area.msg-hint  { background:rgba(253,243,226,0.96); border-color:#e0c48a; color:#6b4d10; }
+  .msg-area.msg-alert { background:rgba(253,234,234,0.96); border-color:#e2a3a3; color:#8c1f1f; }
+  .panels { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; width:100%; }
+  .panel {
+    width: 300px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-family: -apple-system, sans-serif;
+  }
+  .panel.active { border-color: var(--kupfer); box-shadow: 0 0 0 2px rgba(186,117,23,0.15); }
+  .panel h2 {
+    font-size: 14px; margin:0 0 8px 0; display:flex; align-items:center; gap:6px;
+  }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .dot.w { background: var(--anthrazit); }
+  .dot.b { background: var(--kupfer); }
+  .krow { display:flex; align-items:center; justify-content:space-between; font-size:13px; margin-bottom:8px; }
+  .kristalle { display:flex; gap:3px; }
+  .kristall { width:17px; height:17px; background: linear-gradient(145deg, #a8e88f, #4bbf3a); clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+  .kristall.empty { background:#e4e2da; }
+  button {
+    font-family: -apple-system, sans-serif;
+    border: 1px solid var(--anthrazit);
+    background: var(--anthrazit);
+    color: #fff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    margin: 2px 4px 2px 0;
+  }
+  button.secondary { background:#fff; color:var(--anthrazit); }
+  button.kupfer-btn { background: var(--kupfer); border-color: var(--kupfer); }
+  button:disabled { opacity: 0.35; cursor:not-allowed; }
+  .cards { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  .card {
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    overflow:hidden;
+    background:#fff;
+    font-size: 11px;
+  }
+  .card-head { display:flex; justify-content:space-between; padding: 4px 7px; color:#fff; font-weight:700; }
+  .card-body { padding: 5px 7px; }
+  .card-body .name { font-weight:700; font-size:12px; margin-bottom:2px;}
+  .type-Aufwertung { background: var(--green); }
+  .type-Aktion { background: var(--coral); }
+  .type-Reaktion { background: var(--blue); }
+  .type-Ereignis { background: var(--amber); }
+  .card-actions { padding: 0 7px 6px; }
+  .not-ready { opacity: 0.55; font-style: italic; }
+  .abilities { margin-top:8px; }
+  .ability-btn { display:block; width:100%; text-align:left; margin-bottom:4px; font-size:11px; }
+  .ability-btn.used { text-decoration: line-through; opacity: 0.4; }
+  .log {
+    width: calc(100% + 20px);
+    margin: 0 -10px;
+    box-sizing: border-box;
+    background: #fff;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    padding: 6px 12px;
+    font-family: -apple-system, sans-serif;
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+  .log-head {
+    display:flex; align-items:center; gap:5px;
+    font-size:10px; font-weight:800; letter-spacing:.3px; color:#5a5a56;
+    margin-bottom:3px;
+  }
+  .log-line {
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    color:#4a4a46;
+  }
+  .log-more {
+    margin-top:4px; border-top:1px solid var(--line); padding-top:3px;
+  }
+  .log-toggle {
+    background:none; border:0; padding:0; margin:0; cursor:pointer;
+    font-family:-apple-system,sans-serif; font-size:9.5px; font-weight:700;
+    color:#8a8880;
+  }
+  .log-old { max-height:150px; overflow-y:auto; margin-top:3px; color:#6f6e69; }
+  .banner {
+    font-family: -apple-system, sans-serif;
+    background: var(--danger);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 8px;
+    display:none;
+  }
+  .banner.show { display:block; }
+  .mode-hint {
+    font-family: -apple-system, sans-serif;
+    font-size: 12px;
+    background: var(--kupfer-2);
+    color: #3a2400;
+    padding: 6px 10px;
+    border-radius: 8px;
+    margin-bottom:8px;
+    display:none;
+  }
+  .mode-hint.show { display:block; }
+  .footer-note { font-family: -apple-system, sans-serif; font-size: 11px; color:#8a8880; max-width:660px; margin:16px auto 0; text-align:center; }
+</style>
+</head>
+<body>
+
+
+<div id="app"></div>
+
+<div class="footer-note" id="footnote"></div>
+
+<script>
+/* ============ KONSTANTEN ============ */
+const KRISTALL_VALUE = { P:1, N:2, B:3, R:3, Q:4 };
+const MATERIAL_VALUE = { P:1, N:2, B:2, R:5, Q:9 };
+const KRISTALL_CAP = 5;
+const HAND_LIMIT = 3;
+const DRAW_COST = 2;
+const DRAW_COST_DISCOUNTED = 1;
+const DRAW_DISCOUNT_THRESHOLD = 6;
+
+function drawCostFor(color){
+  const disadvantage = S.lostValue[color] - S.lostValue[opp(color)];
+  return disadvantage > DRAW_DISCOUNT_THRESHOLD ? DRAW_COST_DISCOUNTED : DRAW_COST;
+}
+const UPGRADE_COST = 4;
+
+const PAWN_SILHOUETTE_SVG = `<svg viewBox="0 0 24 32" width="24" height="30" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="12" cy="8" r="6" stroke="currentColor" stroke-width="2.2"/>
+  <path d="M9 14 C9 14, 6.5 18, 5.5 23 C5 25.5, 4.5 27.5, 4 29.5 L20 29.5 C19.5 27.5, 19 25.5, 18.5 23 C17.5 18, 15 14, 15 14 Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+</svg>`;
+
+function menuCrestSvg(color){
+  return `<svg viewBox="0 0 20 22" width="26" height="28" xmlns="http://www.w3.org/2000/svg">
+  <path d="M10 1 L18.5 4 V11 C18.5 16.2 14.6 19.6 10 21 C5.4 19.6 1.5 16.2 1.5 11 V4 Z"
+        fill="none" stroke="${color}" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M10 3.2 L16.6 5.4 V11 C16.6 15 13.6 17.9 10 19.1 C6.4 17.9 3.4 15 3.4 11 V5.4 Z"
+        fill="none" stroke="${color}" stroke-width="0.9" opacity="0.55"/>
+</svg>`;
+}
+const STAR_SVG = menuCrestSvg('#5a5a56');
+const STAR_SVG_GREEN = menuCrestSvg('#4bbf3a');
+
+const SHIELD_SVG = `<svg viewBox="0 0 20 22" width="20" height="22" xmlns="http://www.w3.org/2000/svg">
+  <path d="M10 1 L18.5 4 V11 C18.5 16.2 14.6 19.6 10 21 C5.4 19.6 1.5 16.2 1.5 11 V4 Z"
+        fill="#5aafe6" stroke="#12354f" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M10 3.2 L16.6 5.4 V11 C16.6 15 13.6 17.9 10 19.1 C6.4 17.9 3.4 15 3.4 11 V5.4 Z"
+        fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.1"/>
+</svg>`;
+
+const CROWN_SVG = `<svg viewBox="0 0 48 30" width="18" height="12" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M4 26 L4 14 L11 20 L16 9 L24 17 L32 9 L37 20 L44 14 L44 26 Z" fill="currentColor"/>
+  <rect x="3" y="26" width="42" height="3" rx="1" fill="currentColor"/>
+  <circle cx="4" cy="12" r="2.6" fill="currentColor"/>
+  <circle cx="16" cy="7" r="2.6" fill="currentColor"/>
+  <circle cx="24" cy="15" r="2.4" fill="currentColor"/>
+  <circle cx="32" cy="7" r="2.6" fill="currentColor"/>
+  <circle cx="44" cy="12" r="2.6" fill="currentColor"/>
+</svg>`;
+
+const GLYPH = {
+  w: { K:'♚', Q:'♛', R:'♜', B:'♝', N:'♞', P:'♟' },
+  b: { K:'♚', Q:'♛', R:'♜', B:'♝', N:'♞', P:'♟' }
+};
+
+const CARD_IMG = {
+  beforderung: 'UklGRiAFAABXRUJQVlA4IBQFAADQGQCdASpoAJAAPmEulEckIqIhJjQJaIAMCWcA1PFQ5BbYHR/5LVLbs0X6ivleG34M5Iv77krP0X/Y90d6H6VzQA/MfnufSfoD/Lf877Av6y/831qupyIp+VVVVavXXAzFZ6OEbilcYmEsz/Ln5pmcH5h3lA5YqAHxcNPXJZiccS0qB30VmpQ+OhgB3KdI3fgKoiRJK4/kKkHKLuVpls5LwZBeydmElkhKUqKDzg0V0vZEf7l/dUU9tcHKgLlthuSQuijkAbTqPubENqdPsmabvXm+6sRDkAD+/IwgAzgNWOddUv02NPugWieuvtke3cr6tmZbfPCWav5PqnQ6N/6X3fMvLYSeN3Y1cFJCChlsw33KmJ5V1iBrHxS2Q+inyr6J/kxxHnSSBAMQ+vr6WkBBQz0euCPDtuaFERZ7GfmuoF/1gotmiu79ghmgN/ELeQO79U/3TMDSlrrxF3BQ9RcE0MxNlZ5NqUgoRBA/cXb7tRsLJLuUtIqNj+sfGYZZi4NYRnuSa/Pw3UV3N5S5bnj2lInet+NRsBAVh6p7V3V/mhMgJUkXC7SrvpCwf9k/SOwY2A7oi2OlVBwompOYNNPtYWXG+T5FI5uJUZq1wuEyUgx2OsRzPlb++/Fe+9wy2T59QtKctRmJnlK8y+RTj3GfJxuz6DQH67koeL+BrFmds1cRQKfoHXU4EBxO/5PMZjGhf0OJW/mcKOXeG0gakmzOkVqJ3qZ1ACWh3xRQUp8clpU1x7T7UjxK3aU7cn1IiOCsJvkYe5vv9jrpke1O+3ywkzBUtTAiaHEWIAogO7xMp67DmFGGyWXDatlfghlP7A1iVXioFfDozz7/ZjBqct2bjrtyLcsMUJPQWzIDAb/eRrJ7d60bC7sxo8/w4uYdjSYvj+Sba4jmlNz+fgTRwXvZB0Znj14VCGKW/IjJKWgN8tUEGPpLi6hpiEqRa9B3FjCGdwfx3hWn0EoeB3EQ6UquUWU9DDUqNnvmSMNf9/wfgP0bCfUVkl+x/ZrMrBIwPu8d6hhcatlOjk4jDPCJR5KkwTI7DFeFTYe/fFip14HMor7UGv+ETt9izHbYHemGYBW0DxnCu6gEe5+anHJ6E7mXD1Pcko5DXdvSQ6nKTKoxGNRG72OFQYzcaH/zEBEc9+hgbA84CwKu5l+f27VDttPp/9VnBQVcfvBETLASwrwxlaVdbRypg85nYhwvt4FhnZM6SCmD5ZLLsVr9dbFU3tVk/bXmEvY60Soc9FBNpWrsfIAV03x56Glkv875qvWiMI33WXjC5rRA8//BYCTz2Cqt+IYd0nEev+3KaH4FCaE6M3E0ta3hkFpdi3PdHfYxdkHY7fh0G4bj8LcNTG3jWoqmlyj62hb3azxLUT96tWtMTv1bE14ESa0oENKzuWZELUKGNOkFKUrs6WQ056VUAU1dnT3eO7xi7mP7XYe3pp+sWI6Jwn0ATbZk1+ionpWrcdjeOhn6Ct37ffqKcWA5poYseB4pr2xKs/I26pPMUTcO44/FC6i7ABxnhm5zt38xhZnrFjvgxrVtKB8Y9ByAHD1fOmX9KB69sQ/rhD+98qsOyvfNMaXXS96ar+hrezs+Pvpc7G+NpPgHduH9cgNLIfvYfm+9m54RqBgHTd83MtddobNmZlaXA3XDYeJ1c7PhxmiyQDEQACZrIZMhrxE0UC/towme/1dUBFBv84a+3DGKTCYb6WrwQskagOr0aeEHhb8QAAAA',
+  doppelschritt: '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',
+  schutzschild: 'UklGRioHAABXRUJQVlA4IB4HAADQHwCdASpoAJAAPmEulEckIqShJRZqaJAMCWIA1AbAebHaH8dxOxre3CdD+fP936o36jddzzF/rv+0Hu7+kn/XeoB/WP8N1qvoAeWT7I37pekp//71S/M9LP67QAfK/FTtbf5ngJMn8ROl3ma+Nb6a9hH9ZuuCvoOUNxlJKPArCSWBpi29SjEs//5L0L7AbN54iCBOQtFe1jvsFgpgAlnUo9Y5gG6a+060vG6JoAbNa8BRCXUx0v/Nt+xzr9jJj5yXHBXpuyNfTJVn2OhB/pJkbxG3zypU/Wjxqkeyztz5JzDmfxJPpZxCY69o2v5TlBYxxMMiFfoon6Asg5I/sgnq14g9JMEEAAD+/a32caACTcINtw+JMAZzqMiGtzgUp1bYALpYN1Nl+fYCuyfRxx6WYiG0nuXNM2z3W/YjQDIVdzriMkgqk4DExrUvERTa7RZ//GigqN9CAucfzO2CZK/dnYMv3/4NzrGPUG8fFfrDhi32Gb+D7/1IV8weZk0w0Pu5jldqHjqKJmWHuaEgVCk5QlMHugFzP195S0ywlK+jtjKP5y3bTGWCU8UFj7Aut5NlVJjWUJ7/77JZ3HekYLRMPMxI5XD/iNyJmhbVcAlbYRr6Tey+5axNYpbN/3+N0MJ6U2AevXBRAK3lSasCdrDMS2Kqn6JjDhgUl+VWLfwlQnjM1XV4tpv0mxkHmVK1Vxvkd/DVeG/YhinwX5OMjl92zySyI+eEM8qPtc4zscFVcRfjzMrOBozkUBk+185jmbFpdhapeYotGVDkvw/lHo2i53L2vDcGCaNRzpA4KKAHGeJzT43kuPvUxc4pgQjAsG8nWGYH/f95UniozWeKl5jcEJDnYWAZlZsVAiWwhUImtl+dthqblO4Jui125wTqgmxBAmp2SBzRa3l6VQa28NaGFqGKmo08S5YlKJX8P29oNpoXRMLG/ABYzoukAxaOZNbqgtZVecsXGMDN15UcMZd0/9arRTl+7BHKCJf7ioug5g1PJyOzdkEKKd0G8XnjPuJ51mFlRMfusmKEHcHkr4vnnfRk1PKUnBNFtlcvXj6Xc77N+3ErmbWPRu98+ZuIOf+E8elYvp4WNBGaO6k9IpIdG41nesNbFcfPMetF6ba3eaRFfbttZ0hvVjI7EIlndS8NnjRVgQLaY3FsdN4IV4c5qK/98o9+IePGr1p/oQmbSJiqhkhlF+OylK+6IwF8m4bOhk+PNf1gtrQwnl3c8ogEAh9MST9wH1z0ShmziXsFSnLwB7o/vRP6boDqPxoXGJ2Hnx5SOy5R3vZIcViCTjAefVpEX/ZoJWVgTSuChHKc2fPM+D4XwO9s3adc+F/WUhBMR155Wz81PK1QEu9ZqGpyiu0K/CsPpx3dICTyrz9lvoL4WVbenl22cxQT7wTAxgqh/TqrvzU5SGz+vhPScAEMcZrNd/dwFz3779/yG4c+Vu4nFOR99Cxib9WnekGNJD8H8Ng/gdepsHhpD62UYmNls6LtOkVUXHdA7eNGsvst5y7p9JlHnHHNcXqE/NIt0Rp3maiDXNFP+OBa1J+cPe0KjSDpRmlFT0RZJdB698KnPfWRAJ9vv9WR64FMbNsfurY7vEt3oz1+Y7pKGhtU1p+mwDlwkWFEKJCtwG6FTPF6bb0P85JvCO4n9d5NAe9vVFN4aFTJG6E21KiozYwqyL1UdonA34KQwgxnsgJjRzcSQUek5fjQ5V1VEUAFzggYW2vws/ovoTHhY3y++8y/jEgoguTfEOFkq6s/lbJeRnPUwGqDOL5j2c0uCCz2dx/gmxR0Tdw6VJqUsKfP9h72vyK8MzLZ4rQj1YSKXQSxkUStrpFi0IJ9s1jJg1Okccfl/a5gn+ByNZjBOEJVZJRbk95om9OBLkj8hbOv3K1MQq6S2Ypxyz8LdOPgcDa3Cr9NZ8hH4asV8v1DH36gG8YpAINisXiZc9mRG1FPz6hA0eeXgYRHYsVxMCoLXv3m/jn+GwA/ibxhZTLA1KdoswRXz/b8CgZEYbfKS91ZjuXTfgLMeiCpUGnnHaLqSmf1gNOz3TCqcSza+u26h5xb9RTJ7E3tzn89O0PAth/qC19GNqDJhlFuasfOc34Uk3lr9nANszdktd2w39OF1tlFFZHgOwqocLSMpm0NdyAbfhqu5Afc9r9cLSQR6DGzm7l9OUo8fdj0t8pfv5wMFORwxXFpkjqx1Ivj6ksX/VQtjAeWIDZiTQvPd1B2RAjlq4Lnto/ZOxhUVw0Pw2tnLN5UgSFnstAmfPyIM2jZTpbsknsivRuiMpO79fuPJ8oCOgW8JEwSYwJEyIjWO7FGsJGUktBoxrNyiFeHpsyi5bAJdbawna5tNVJaF8aI4JI4W9LFtztuizSiEe0l6F2gaQBS6XdpnOIxAXt5rOWcaEKNvAu/AWAgojJECSqJ79s4qgAAAAAA',
+  springerinstinkt: 'UklGRmAEAABXRUJQVlA4IFQEAADwFgCdASpoAJAAPmEulEakIqIhJjVaWIAMCWUA0lXPfObLp6y+fA00neWpcB+UWVg/R5yj/AY7biL0omPT0JM+r0F7BX8sJmTzNd/8oIwZiabOBXl1mfu28AeqzPbq507KHwf7rdHqqstHbPMtBlLk0nQt+cz5Ih5E2EY1mCP0EAzM7Ga5NcDZn2I33KE8H0KSuQq+RoZklEs7INEIfICgYMXguhBp9t0jP3+YlXIXsmz0vEq7XXHvQ2uaRT5eAPAA/vyM+JjgBCbnyt2TVzHOZjmSYn26jK5D7+GRo22Phfz7bVMvWSDT9Emc8wQk1CnKaTbEvgXrRJ03TXYHeTz21NLmTUXgI3iCcGnnNfACJFWmU2NegoU8mmi/U+7a72czd1RGqie4/1/60ElxKFjLYX7mNtfpngKByQwy8pSRjyntRG/et7HwXaqliuaX+JeZh8ZIfVT3sgfA6PggEYs/3228DaYEfiw0lAjqJ9I3vwGWFjtUgPuB8+lTRD4FhdoeLz5/u8LiHSeTROzuY2o7NwP7uUTTuGB9Bk7DOtqN8Q9t48/RiCp/beVexZ0X3YMx1eFE9/dVfAPDi9opP1Z+yg7/1fG3JNg65BfMQjX6Lou7ur56pSikahnKxn3Jn/cd35CsFrS0uoArVrd+GoXACCHCNXpP5WSL92I2Vk9M71J/9gdxDcF+xkw+BabU5R+fvNqCZUyLbS3KrHErUxCuOM6L6ES761pfT3/iYkq0HUt8tj+vO2BEyCNLtJsCRzN78T77mdIgFdi95vdcjkTYc1b795SY2vL7KvslBROtW3B4TgdmfwVDZXpFjOkEnm26kHxnZf+7brSyC7rWc4kI6mM05I6uDWro+6pdGwvHQ3AJrtIBO347wWKCL4/wXCCruTBGeKMBxwxMohIjQDOjw8iKizITJkmsu0+4pxNSSekw/xrY+Zo4Pvl3t/lNEnj1Q1B359k1rcBMra2ZoAwB80b0B7K/w7vcQXcscC2YdyaZ1WE6LsZ2giwP6tf2/yqY3+KquBWiWnwiB4+mchMUg+MGSk9ryOZ+lQqkNSObtikl+c98U5nPrjjCz0CuAl6smUEO25CDhD2UUNQOnO7XTXsJB9AUOfU7l3FO0Gih18HvYAFPwEBWy1BIj+yD8CNgKH7kdKNsfJtQmwF/4+X8W7noWGaB0ZNHAnweFZtfaFaDc6/8MhqyYpbDKuJkh/od0sDhNv91+//+tbPyGqZRwuNH4Hi+k/rl9Emew/h+nvtjNyighFvJOX73uz7ZpuVUsUSl+sICYvdx8cmtK/ZSMEzjCi5cHETEBHCKgu1ZsHpEPqEBcoYkIqYqz5+7Pw8tNyxf316qOS2cN9++tNT6je/U9q7z+2/w1dKy06hFrGEC0DXjHCwtLvQUdzGG3ev83vMbC9ivqSV44urBmOg+ixz5qNul12Zhqr4EHuDzrLyDWjom2sV6NQ5j2UqRB6AAAAAA',
+  kristallraub: 'UklGRoAFAABXRUJQVlA4IHQFAADwGgCdASpoAJAAPmEukkckIqGhJBYLMIAMCWMA08Q5ckUYCFvtvM9A6y30APLZ9k+s0dJ5pbzO/g2J9RD8HLj//ccbOlNx7+gNoL+nfYK/V//mdjD0jSzyl+mV5+90v0zKbOQ/nBCh+SqevnQFYkLVXdDgBri5OwKbmsziI2t1UTK39vDKkCVLI+JHH+Z9P/RHBMI4JD1to1XW2kbC7ePoEsBGK0bXM3xOEUgZ1fVbQLFK8AZtSP9o5xggHhzK1GqZXbpcWDrSiEj7gI7bbG5mIlO1D1qrg/3gGu8rOMLjAAD+/N6CuSAG/NTaUWIRNGsUBBAuxkxrb77YzKiu70LQTIdOcn+hV3TWb46b6ZODkf+4CozRv0zXFzD+X591NyjMX5v9hooLl2H2e7u1G/+/ZpI9WuIq3EgKS2MNM8y+10E9WLMr3Y/jkV0V2iVp6c9B8lsifCfpiWIPw2dzJaquukPkOP1umY5VfGh2/Ui6jWJxhVDeS2IsMXTZ5FmL6J++rsNlfqWR77oJJDgLY3K/dIsDLIQde2To6u3IQYYw++xMuYyTYFRyvpYSo/Y20QnRCbjNI7+E8oFpjmyaZ8KTHdHefcjB59+dvNjJwLP5H28bzRYPrc9lCkY/sG/0fxhji3n4O/eONrAZvmdHTaWDayzFVhjQ4Y1CnwVaajtjNf0enveZz6Y04QFMgz6suNZ5qYlD/aluWhPixn0o4p9lQGeLstr54xDQ8uTXiebfpVve6Mg7PDAMmzwHllAhQtGt3/61ckMg/NV98VVVW1fxl6fcbVXD7hvaw1+weSQYJ7fMQXus7T/h7HiPsQiFdFT4gMcsYlVlBMot/Od7e+rpbydreX6J2PQtuX72tfzf3mJEUUY01+uKEIzjoL4gpcP140yXGIGaEKG7Zj92Mno5foxG4Hvk11YaATW4Zud8CWE+FUJy46JEv4/N8Wa0YAt5fYel+F1HdqZyA4wCuLzDp1CeAWX7z2PtogXdKiIWdEHI7cBsmXgBIrJI5FmqgMi9TS5JzVC+yV/gXBvWww8SA96j08On94s/qPkGu3ZP88+6gO4H/hD11KaaeWzPT0PuLRyLZyl5/GGJm1tZf0+RaieGRp99rthFH++2Vn+akHmmWygtHjUi/fjNVh/YWPwNUCRGV187BAAEwtbVix9NpghrB/jXslmSqjAWiqo0F25PxEkckwq4WYAEgvTD3h7CWDqGnfnjW9263qmfv9kiAmY7F0HrLeqs3v/Lzq8k7enbRUFXCZoS8rLdX35Ub9o2f6+JmnxsPrD40wHMHH33UZP12fZf3YA+Ex3btbfHGn4WBxnqnh3x9LdV3Oxbwnv9JWRInNFF86qy+dpBaeut0gmwShdka/xF2IVgzOOHXsW/xxzD/AfDR6xupqKv/99LLo22pNXeweCgTZyDdw8yURMVpZFLcsQ3p+WH7JvJw4iqXqH6er9wYXnzPv3evlrU6knWSPMj1a1VTx81UGyBj4YksYzXuyXyzZgOsI8NRBhdi6JEILcCn5eN6UrUQAjlCgELneY6MQW5hQNtdw5FAWm0BFQFwSqCRMbMmRx3GfHDR4mZ7k8skCx/8em3FvB/PQuEATiuTsPs/7h0i2WhP+Vnaf5nYp0+LBF58wE/PC85tM9laPRO/VYaKvH98INgwZonsy7UaL2XXLcSgZEpP6gpiFETtg+EfQuYf41b7YIdm5QrjVhJ7qin+XmlbmWAnX1L6JV1tJZZ4CfIci0fbGnwPF6yr0XFW79CpwtUW6LuXn1sUhcXBS7EJ5+4NiVlN3Yor654ZryxLFLys14HMhIcurMhEigFBPjqs8U75r8nYDq1B9/Z2XHIRQmwmxfgAAAA',
+  wiedergeburt: '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',
+  laeuferwandel: 'UklGRowEAABXRUJQVlA4IIAEAABQFwCdASpoAJAAPmEulEekIiIhJjFZQIAMCWUIcAGVyMjSxt3rtm58T9bvhE/cD0maZ2+C/JvJ7/l843/eseN/g+5u9BtKtjt8/TPC9M+wP+s++8EUlRmZm4tO7qumdxcVoO6tMxakljAYOA6H9sZ+VH3NbS9D5S0G41iJ074LPQ2CJg3rwUQ8pRK3RfdZTKhd6YyxzD7ZC9JFBLiU7VwdYk9RjbtytCXHDpVt+eNg3v3Xqi0JpVbppMD0t2X/p3c7uYAA/tAMPPCBcBe+PlyCr/4B/4eP6vc4/Hb7IanxocnQ9NCla5CN+3vyHR0eL2ELUf0VktdOOdaYvy3PgwipjsS7q/PKfv6vVIhwHQXiPDU6vgFOVF6qlANHSDsf6FOst1jpGhMpEyoJ7uNyg8ToLY6eO0z9p9X54prVOoku6qL3v6PzTgCcQ2wEugUGgOgZOwpObscK8z2tvQ3ZiJ+Tc5FEO3odijsGlU/n+7FINoKVfmnfkp49Oi8yNL+3zELuTu+jGvcNIUbSc3zpD60834Lz8KXYbFddk5KtJpIY6onFmcCvd6htUnIcFmHb0zxDuLCFsjeILPOiuIbLeijuDHHBvjxJ9H2Pryq+KzYvwfObnJueqa/QC/GUY+y9rpH4E9e0xZzKEucSe2m5SoU9Qh/D4r2iUd/hfXi+rlrE0Zt/x11oez8YSccfugej7kt8v0r5dXL9kOp9UwOxh5TpW/tbO8P+ZlRzAaUE+Uzri6I7xCbCkC9HvPwLsR6YWv0jvxzsLdLJrZXtlfU+4Cdf1GllrCYdX966q6T3lQoKCkirRP2+IphPbKU8S5WbGPbyIaN6l8RkXId06VyXR2md+WP7iBoYG+tfRagqH9YfSIgALE5C2vmg0npy0Twkjgsdg7olmoCMf29Bv88Ek4LntX/xVpd7Dy4Kp47gBNdvhY2g8jV57edwjvvx+Gdll2yXDDr7gVJqaRbgcgnnapIkuzfl8rdP+XN3KkJYwn2cIdyQ0QXt1PMuXcz40tko3Qt+/hp1gSQvCPbTJktJAQARDu5yFaYiHf/mugr8EtrOQg3JyXIOZcE8j5plVP4efz1Parl4AIWRFsOn715WqgzpD2odrSBdIPV2glh/AfnxFCjk6vLnIyLEfRbs6FCipskuNTCCW4rGcjPv/j/KvAVXawIH+nFlQ0In7ocC8VKhoF7ayVQaEPUOTwTrhBmtzBdY4a3gAPJQ631B1uVnQJIw+dygPkVL52zIF+vie82FQzz1OIb7a47v9uoaR/lyyz6Il9kAL93pr2ZbzM3AAiDolDQX+L5FpZkMk8jNC/1D/5JvSffSteIhv+vhhqT7H9fOdQBoclIPJeJjXS7s9pT2JUIXOFE4db/VytFyjurk0a5fRqdCMV4BsnRn9tfBWvb0u7zL+G6LYYA8nJGZ4Udnv4IBgDB9aFuprEcL5lJxstenxNP0QlBb5f7vGvTF7C1cAAVkr+xUInzJT814woZJbzdQw/akfezvNDBPQGg0CjxB/wcuIbaOExO6gAiAAAA=',
+  trugbild: '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',
+  eisernemauer: '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',
+  kristallsegen1: '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',
+  feldsperre: 'UklGRrYHAABXRUJQVlA4IKoHAADQJACdASpoAJAAPmEsk0ckIqGhJbLq6IAMCUAaVBCqoo3nZpOl8UvpseYr9lPWO/WbrAP276x/0AP1m9Mb9h/gy/aL9x/Zv//+cS7XfWp9tsom+G/K/k92qP8twP4APyb+gf7rwXv5X0L71P9N+6PmtaAH6C9V7+s/7H3Ve2L8y/yf/r9wb+X/2D/j/nHxyRhF/FVnY5SdoIhEbV5qPi8/TSufpNJLTku4QT3itFnWi4MQ7V573Wa/6AajHskVkR1D7TuUgCMztfv7JwAizaPfQOPY1nzNDJIgIx0eFGKAYQc+Dp5527D5vw0FB6YLQx9FOq5DOYy6EitTeA93lNQC7YWKrGpOEzbnbuRvb8Pc8a9xV0212MsGkLlVjKsAF+ZelLfmCe+3zhCWnp54urAA/vzeIxAAAdhhD7J0zVX0TZLJL4uU+9UFi2ab0q334HxkEIJy4Hf8QG7gAO9nyZfm4/sWG+u/rE3ET21en/SZpKxNBjhvZdRQlkveiPlZPSt1waYizcRHlLShtFtqvXt41l78TBSkfLzy1NTKUpe3RoX2XuFDueE9K99B9e3f2QlyC8xS2Wu7V9RUA7YIwbW/m9Q7t/qDFDmk+vkzeS4zRtBeUUzoxjIj55uyT1xeYfYIQleCb45jE8KVrFWj/lJzZEM/J/dSSeLSb0VceygIT5esBBfaQjbriilRPLXZwANeyw4dXUzUNC2Hq2DLIo+wqLQFioMtvlyC8o8B+zAPxQjQnXCnZ3ZqGVKDFxvOLF6iIXUKLS/R+wJjr4AQd0y63PNWLthJFrd6V0koEb/mnBlQgkAvnRnFYkVqn/oIJSFghYrHugFQduNJf5974J8cXYOCmencZr/Fo8rTavWYhZnllGif18+ebUFfmKD+yEA/oX0zvr9EW6IzJ2L6Q5Alk2Ekxrr7ggFWpUXP3OIqoOHTClgWO1ziLde3YN0JKJNB0x3mBqN39ZXBXc9+LYYePAYrUFXxVfA6jh1GFhDXI0xGiWOR0NgElbDfsIVKwTyIL57U+L3LeMWgcA1HF0tjWpvv1VOvUqZjT2Vk81TM6dxuTx6YK8aD7UGnY2XR2ori4bIfrLcS4wJjrDFUFzDOdY0LO5J5kfWIhnj+DaxPcP9jMllaEg0htfjBj5lw2+kHDfAR/nGD/ygPismFIGf6i4a2X9ZiNONw6vziEMxu0wVf4ll4MEJnEIRc26WtSiiEEPUC0/+KtZ4IfKwIz4YpKpPpz4ovB7+W7X8enfhCs0sKbIi6N7WTf5BbluVJxJHccsERMH9/qZUEkm3+y3zB48/EN/lH4GRENDWIHfU8WmKcl/XUNjLaoO36Yuoevo9awxrsHejDNkpf37kJUlf1fHCks+6SWh7ylN6VrXNX0wtDOp8NX+ArrJ9p9bahN7ezEXCv5J31aX0TG+zlZQIkt/ntB6ea0o+0W8ucxItcc/g7AVofee3zzwn0nmCezPDmvvZuvm5iJ/N8FV4a20e9cM4rEKY+MtsEizNKY5R+3Ya6wpGv/js8ZsM7g0vvjCx3jtab9fj/5hurL7+ob3u/qRMl2j5eLbZhhjH1n+56V3Bf/bOLZ+zwjqsjLpnahsojR8vWak2WCEt67sT8vn8O/2ZtQr1VAcvTd/Z87XL3+ZeO9sRZy8i2WKA/56A03cFHaTi6lzR8vXa5FVVPT+QC1SAZoH7/5NpK2kT3z4egDailTNeXO5iW/+64NWO8+3LsERWNLvUNxELYSzjtvJEvkaVXBMG5abE9fa9qFS4hXdJZMbSPv7yRuzxv/8ZneG5j+gGs5HaeNUuQEc1jCP+Uyv+m1LuQDTRYb6AI2Yr2meD9amP5/EkM5Xch3AkIxSyMaUS0qs9ahvThohdLyCqUiLr85x0KTEQvgfTSvEZmj4PJU4pimq0K4JAudljhhA4Bxx04vw2rfr47S4aZZZjXSeqXRA9My+55CRAlJ/GL/mrw2INAEsInUzv+YqnSMvuIo7xb+azR9gejEPBC18iDgADB8Y3ymtELkEHciVeuXv9xqXr2i/GL/mppqfnKM9zg9PSipO33LtV7lEFILxtkdnQW+CPPwCeiGq/DqusEmRs42p3aVfOnOqxI6w9Xj/tlOzWotfqTJ50+cJB6bbfxEr/+MekvWv3QOTL2FGZWvj6QVVsSDhP7cSdWlDY9RENxy5wRKe7+CSuLL4BAaKz4PEakloVs0OYPlLrua5tgLHZDEL3wfLEgmarQkA9ceN0IFpuoU7qB4pHtQgIItc7zIx16IkBpcAJcKvFMtxfl9w8Rj4agEO5JBZpiLmUzqbDL76mZMyc3dY4g6cG+2EuGi3iNbbg8IYCTG8MggMrwvL32ZRQv9++HXeRnlPd5TSo51sw0/8klGItL8cGKsL7RyeUPQwd5bybP6wMeob+XtC91tdF2oBG9XccxaXLq/YHgFvAUQ8j8aJEx/u25v2maFTY7dUCRVZQ3NKjnNALNFimIQ1uCnQHhcOb9QBX3cfNveINIrv+r8/aBhWTZR28MU40yR+v7Fo//jsrd8flD3DsFD4No/MCA9KkPEDhef1nCmWhRTM9U5wXGreQFp/IdMla6xAGluF9Vvq1WMixBIcD9SN9f8AAAAAA=',
+  damenopfer: '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',
+  gegenschlag: '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',
+  duo: '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',
+  zeitdruck: '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'
+};
+
+const CARD_DEFS = [
+  {id:'beforderung', name:'Beförderung', type:'Aufwertung', cost:2, desc:'Ein eigener Bauer wird zum Wächter befördert (Stufe 2: bewegt sich zusätzlich wie ein Turm).'},
+  {id:'doppelschritt', name:'Doppelschritt', type:'Aktion', cost:2, desc:'Eine eigene Figur (außer König) darf diesen Zug zweimal ziehen.'},
+  {id:'schutzschild', name:'Schutzschild', type:'Reaktion', cost:1, desc:'Wird automatisch angeboten, bevor eine eigene Figur geschlagen wird \u2013 verhindert den Schlag, wenn aktiviert.'},
+  {id:'springerinstinkt', name:'Springerinstinkt', type:'Aufwertung', cost:2, desc:'Ein Springer darf ab jetzt zusätzlich ein Feld orthogonal ziehen.'},
+  {id:'kristallsegen1', name:'Kristallsegen', type:'Aktion', cost:0, desc:'Erhalte sofort 2 Kristalle.'},
+  {id:'kristallraub', name:'Kristallraub', type:'Aktion', cost:0, desc:'Stiehl dem Gegner 1 Kristall.'},
+  {id:'wiedergeburt', name:'Wiedergeburt', type:'Aktion', cost:2, desc:'Bringe einen eigenen geschlagenen Bauern auf ein freies Feld deiner Bauernreihe zurück.'},
+  {id:'laeuferwandel', name:'Läuferwandel', type:'Aufwertung', cost:2, desc:'Ein Läufer darf einmalig auch ein Feld gerade ziehen.'},
+  {id:'trugbild', name:'Trugbild', type:'Reaktion', cost:3, desc:'Wird automatisch angeboten, wenn eine eigene Figur angegriffen wird. Blockiert den Angriff: die angreifende Figur bleibt auf dem letzten freien Feld vor dem Ziel stehen, ihr Zug endet sofort.'},
+  {id:'eisernemauer', name:'Eiserne Mauer', type:'Ereignis', cost:2, desc:'Für den nächsten gegnerischen Zug können deine Bauern nicht geschlagen werden.'},
+  {id:'feldsperre', name:'Feldsperre', type:'Ereignis', cost:2, desc:'Ein gegnerisches Feld darf 1 Zug lang nicht betreten werden.'},
+  {id:'damenopfer', name:'Damenopfer', type:'Aktion', cost:0, desc:'Opfere deine eigene Dame, erhalte dafür sofort 4 Kristalle.'},
+  {id:'gegenschlag', name:'Gegenschlag', type:'Reaktion', cost:2, desc:'Wird eine eigene Figur geschlagen, schlägt eine eigene Nachbarfigur automatisch zurück – unabhängig von deren Zugregeln.'},
+  {id:'duo', name:'Duo', type:'Aufwertung', cost:2, desc:'Zwei benachbarte eigene Bauern verschmelzen zu einer Einheit mit Turm-Bewegung.'},
+  {id:'zeitdruck', name:'Zeitdruck', type:'Ereignis', cost:1, desc:'Der Gegner darf seinen nächsten Zug keine Karte spielen.'},
+];
+
+/* ============ SPIELZUSTAND ============ */
+let S = null;
+
+const ABILITY_INFO = {
+  K: 'Weiche bei Schach auf ein freies, sicheres Nachbarfeld aus. Zählt nicht als eigener Zug \u2013 danach ziehst du normal weiter.',
+  Q: 'Aktiviere dies VOR einem Zug: schlägt die Dame danach eine Figur, bekommst du zusätzlich 1 Kristall.',
+  R: 'Der Turm verankert sich statt zu ziehen und kann bis zu deinem nächsten Zug nicht geschlagen werden. Verbraucht diesen Zug.',
+  B: 'Der Läufer wechselt zunächst auf ein angrenzendes andersfarbiges Feld und zieht im selben Zug anschließend normal diagonal weiter.',
+  N: 'Der Springer darf in diesem Zug zweimal hintereinander springen. Nach dem ersten Sprung erscheint ein Hinweis \u2013 wähle dann das zweite Ziel.',
+  P: 'Ein Bauer außerhalb der Grundreihe darf einmalig 2 Felder auf einmal vorziehen (Weg muss frei sein).',
+};
+let openInfo = {w:null, b:null};
+function toggleInfo(color, type){
+  if (typeof S!=='undefined' && S) S.selectedCard = null;   // Kartenauswahl verwerfen
+  const wasOpen = openInfo[color]===type;
+  openInfo.w = null; openInfo.b = null;   // immer nur EINE Info gleichzeitig, egal welche Partei
+  if (!wasOpen) openInfo[color] = type;
+  render();
+}
+
+function freshBoard() {
+  const b = Array.from({length:8}, () => Array(8).fill(null));
+  const backRank = ['R','N','B','Q','K','B','N','R'];
+  for (let c=0;c<8;c++){
+    b[0][c] = {type:backRank[c], color:'b', tags:{}};
+    b[1][c] = {type:'P', color:'b', tags:{stage:0}};
+    b[6][c] = {type:'P', color:'w', tags:{stage:0}};
+    b[7][c] = {type:backRank[c], color:'w', tags:{}};
+  }
+  return b;
+}
+
+function newGame() {
+  S = {
+    board: freshBoard(),
+    turn: 'w',
+    kristalle: {w:0, b:0},
+    lostValue: {w:0, b:0},
+    capturedPawns: {w:0, b:0},
+    deck: shuffle(CARD_DEFS.map((c,i)=>({...c, uid:'c'+i}))),
+    discard: [],
+    hand: {w:[], b:[]},
+    abilitiesUsed: {
+      w:{K:false,Q:false,R:false,B:false,N:false,P:false},
+      b:{K:false,Q:false,R:false,B:false,N:false,P:false},
+    },
+    selected: null,
+    legalMoves: [],
+    mode: null, // special interaction mode
+    log: ['Neue Partie gestartet. Weiß beginnt.'],
+    gameOver: null,
+    flags: {
+      eiserneMauer: null,   // {owner, active}
+      feldsperre: null,     // {square:[r,c], forColor}
+      bollwerk: null,       // {square:[r,c], owner}
+      zeitdruck: null,      // {forColor}
+    },
+    checkInfo: null, // {color} currently in check
+    playedCardThisTurn: false,
+    pendingChain: null,
+    tempShieldProtect: null,
+    boardPop: null,
+    showEndButtons: false,
+    winOverlayDismissed: false,
+    pendingWarning: null,
+    centerPop: null,
+    menuOpen: false,
+    gameCode: (typeof makeGameCode==='function' ? makeGameCode() : 'WS-00000'),
+    logOpen: false,
+    abilityMenu: {w:false, b:false},
+    activeHint: '',
+    botPlaced: null,
+    newCardFlash: null,
+    drawFlash: null,
+    selectedCard: null,
+    botCardNotice: null,
+    botGhost: null,
+    chainHint: false, // {square:[r,c]} extra move available for same piece
+  };
+  render();
+}
+
+function shuffle(arr){
+  const a = arr.slice();
+  for (let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function opp(c){ return c==='w' ? 'b' : 'w'; }
+function log(msg){ if (S.log[0]===msg) return; S.log.unshift(msg); if (S.log.length>60) S.log.pop(); }
+
+/* ============ ZUGGENERIERUNG ============ */
+function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+
+function rawMoves(board, r, c, opts) {
+  opts = opts || {};
+  const piece = board[r][c];
+  if (!piece) return [];
+
+  // Spiegelzug Schritt 1: NUR die andersfarbigen Nachbarfelder (ersetzt normale Zuege fuer diesen Klick)
+  if (piece.type==='B' && opts.spiegelzugStep1) {
+    const moves = [];
+    const ROOK_DIRS0 = [[1,0],[-1,0],[0,1],[0,-1]];
+    ROOK_DIRS0.forEach(([dr,dc])=>{
+      const nr=r+dr, nc=c+dc;
+      if (inBounds(nr,nc) && !board[nr][nc]) moves.push({r:nr,c:nc, forwardOnly:false, special:'spiegelzug'});
+    });
+    return moves;
+  }
+
+  const moves = []; // {r,c, forwardOnly:bool}
+  const add = (nr,nc,forwardOnly) => {
+    if (!inBounds(nr,nc)) return false;
+    const t = board[nr][nc];
+    if (!t) { moves.push({r:nr,c:nc, forwardOnly:!!forwardOnly}); return true; }
+    if (t.color !== piece.color) { moves.push({r:nr,c:nc, forwardOnly:false, capture:true}); }
+    return false;
+  };
+  const slide = (dirs) => {
+    for (const [dr,dc] of dirs){
+      let nr=r+dr, nc=c+dc;
+      while (inBounds(nr,nc)) {
+        const cont = add(nr,nc,false);
+        if (!cont) break;
+        nr+=dr; nc+=dc;
+      }
+    }
+  };
+  const ROOK_DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+  const BISHOP_DIRS = [[1,1],[1,-1],[-1,1],[-1,-1]];
+
+  if (piece.type==='R') slide(ROOK_DIRS);
+  else if (piece.type==='B') slide(BISHOP_DIRS);
+  else if (piece.type==='Q') slide(ROOK_DIRS.concat(BISHOP_DIRS));
+  else if (piece.type==='K') {
+    ROOK_DIRS.concat(BISHOP_DIRS).forEach(([dr,dc])=>add(r+dr,c+dc,false));
+  } else if (piece.type==='N') {
+    const L = [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]];
+    L.forEach(([dr,dc])=>add(r+dr,c+dc,false));
+    if (piece.tags.extraOrthogonal) ROOK_DIRS.forEach(([dr,dc])=>add(r+dr,c+dc,false));
+  } else if (piece.type==='P') {
+    const dir = piece.color==='w' ? -1 : 1;
+    const homeRow = piece.color==='w' ? 6 : 1;
+    // duo => pure rook movement
+    if (piece.tags.isDuo) { slide(ROOK_DIRS); }
+    else {
+      // forward move
+      if (inBounds(r+dir,c) && !board[r+dir][c]) {
+        moves.push({r:r+dir,c, forwardOnly:true});
+        if (r===homeRow && !board[r+2*dir][c]) moves.push({r:r+2*dir,c, forwardOnly:true});
+      }
+      // diagonal captures (classic)
+      [[dir,-1],[dir,1]].forEach(([dr,dc])=>{
+        const nr=r+dr, nc=c+dc;
+        if (inBounds(nr,nc) && board[nr][nc] && board[nr][nc].color!==piece.color) {
+          moves.push({r:nr,c:nc, forwardOnly:false, capture:true});
+        }
+      });
+      // stage 1: ferz (all 4 diagonals, move or capture) + orthogonales Schlagen
+      if (piece.tags.stage>=1) {
+        BISHOP_DIRS.forEach(([dr,dc])=>add(r+dr,c+dc,false));
+        // zusaetzlich: orthogonal ein Feld SCHLAGEN (nicht ziehen)
+        ROOK_DIRS.forEach(([dr,dc])=>{
+          const nr=r+dr, nc=c+dc;
+          if (!inBounds(nr,nc)) return;
+          const t = board[nr][nc];
+          if (t && t.color!==piece.color) moves.push({r:nr,c:nc, forwardOnly:false, capture:true});
+        });
+      }
+      // stage 2: additional rook slide
+      if (piece.tags.stage>=2) {
+        slide(ROOK_DIRS);
+      }
+      // one-time straight move from Läuferwandel-like tag (not used for pawn) - n/a
+      // vorstoss (temp ability): 2-square move even off home row
+      if (opts.vorstoss && !board[r+dir][c] && inBounds(r+2*dir,c) && !board[r+2*dir][c]) {
+        moves.push({r:r+2*dir,c, forwardOnly:true, special:'vorstoss'});
+      }
+    }
+  }
+
+  // Läuferwandel one-time straight move
+  if (piece.type==='B' && piece.tags.straightAvailable) {
+    ROOK_DIRS.forEach(([dr,dc])=>{
+      const nr=r+dr, nc=c+dc;
+      if (!inBounds(nr,nc)) return;
+      const t = board[nr][nc];
+      if (!t) moves.push({r:nr,c:nc, forwardOnly:false, special:'straight'});
+      else if (t.color!==piece.color) moves.push({r:nr,c:nc, forwardOnly:false, capture:true, special:'straight'});
+    });
+  }
+  // Spiegelzug: der eigentliche diagonale Weiterzug nach Schritt 1 ist ein ganz normaler
+  // Läuferzug (wird ueber die Chain-Mechanik automatisch durch legalMovesFor(...,{}) berechnet).
+  return moves;
+}
+
+function attackSquares(board, color) {
+  const set = new Set();
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p = board[r][c];
+    if (p && p.color===color) {
+      rawMoves(board, r, c, {}).forEach(m=>{
+        if (!m.forwardOnly) set.add(m.r+','+m.c);
+      });
+    }
+  }
+  return set;
+}
+
+function findKing(board, color){
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p = board[r][c];
+    if (p && p.color===color && p.type==='K') return [r,c];
+  }
+  return null;
+}
+
+function inCheck(board, color){
+  const k = findKing(board, color);
+  if (!k) return false;
+  return attackSquares(board, opp(color)).has(k[0]+','+k[1]);
+}
+
+function cloneBoard(board){
+  return board.map(row=>row.map(cell => cell ? {...cell, tags:{...cell.tags}} : null));
+}
+
+function pathBlockedByFeldsperre(sr, sc, tr, tc, blocked){
+  const [br, bc] = blocked;
+  // Zielfeld selbst gesperrt
+  if (br===tr && bc===tc) return true;
+
+  const dr = tr - sr, dc = tc - sc;
+  const absR = Math.abs(dr), absC = Math.abs(dc);
+
+  // Springer ist ausgenommen: er darf ueber das gesperrte Feld springen,
+  // nur das Zielfeld selbst (oben bereits geprueft) ist fuer ihn gesperrt.
+  if ((absR===1 && absC===2) || (absR===2 && absC===1)) return false;
+
+  // Linienzuege (gerade/diagonal): Sperrfeld darf nicht dazwischen liegen
+  const isLine = (dr === 0 || dc === 0 || absR === absC);
+  if (!isLine) return false;
+  const stepR = dr === 0 ? 0 : (dr > 0 ? 1 : -1);
+  const stepC = dc === 0 ? 0 : (dc > 0 ? 1 : -1);
+  let cr = sr + stepR, cc = sc + stepC;
+  while (cr !== tr || cc !== tc) {
+    if (cr === br && cc === bc) return true;
+    cr += stepR; cc += stepC;
+  }
+  return false;
+}
+
+function legalMovesFor(r,c, opts){
+  const piece = S.board[r][c];
+  if (!piece) return [];
+  const raw = rawMoves(S.board, r, c, opts||{});
+  const legal = [];
+  for (const m of raw) {
+    // Der gegnerische Koenig kann nie regulaer geschlagen werden -
+    // die Partie endet vorher durch Schachmatt.
+    const tgt = S.board[m.r][m.c];
+    if (tgt && tgt.type==='K') continue;
+    // Feldsperre: Gegner darf das Feld weder betreten NOCH ueberqueren
+    const fs = S.flags.feldsperre;
+    if (fs && fs.forColor===piece.color && pathBlockedByFeldsperre(r, c, m.r, m.c, fs.square)) continue;
+    // Eiserne Mauer: cannot capture protected pawns
+    const em = S.flags.eiserneMauer;
+    const targetPiece = S.board[m.r][m.c];
+    if (em && em.forColor===piece.color && targetPiece && targetPiece.type==='P' && targetPiece.color===em.owner) continue;
+    // Bollwerk: cannot capture anchored piece
+    const bw = S.flags.bollwerk;
+    if (bw && bw.owner===opp(piece.color) && bw.square[0]===m.r && bw.square[1]===m.c) continue;
+    // Frisch aktiviertes Schutzschild: fuer den Rest dieses gegnerischen Zugs unantastbar
+    if (S.tempShieldProtect && S.tempShieldProtect[0]===m.r && S.tempShieldProtect[1]===m.c) continue;
+
+    const test = cloneBoard(S.board);
+    test[m.r][m.c] = test[r][c];
+    test[r][c] = null;
+    if (!inCheck(test, piece.color)) legal.push(m);
+  }
+  return legal;
+}
+
+function anyLegalMove(color){
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p = S.board[r][c];
+    if (p && p.color===color) {
+      if (legalMovesFor(r,c).length>0) return true;
+    }
+  }
+  return false;
+}
+
+/* ============ SPIELHANDLUNGEN ============ */
+function isBehind(color){ return S.lostValue[color] > S.lostValue[opp(color)]; }
+
+function addKristalle(color, n){
+  S.kristalle[color] = Math.min(KRISTALL_CAP, S.kristalle[color]+n);
+}
+
+function actsAsRook(p){
+  return p.type==='P' && p.tags && (p.tags.isDuo || (p.tags.stage||0)>=2);
+}
+function kristallValue(p){
+  if (actsAsRook(p)) return KRISTALL_VALUE['R'];
+  return KRISTALL_VALUE[p.type];
+}
+function materialValue(p){
+  if (actsAsRook(p)) return MATERIAL_VALUE['R'];
+  return MATERIAL_VALUE[p.type];
+}
+
+function showTrackerPop(value, side){
+  const pop = {value, side, t0:Date.now()};
+  S.trackerPop = pop;
+  setTimeout(()=>{
+    if (S.trackerPop === pop) { S.trackerPop = null; render(); }
+  }, 1300);
+}
+
+function showBoardPop(r, c, value){
+  const pop = {r, c, value, t0:Date.now()};
+  S.boardPop = pop;
+  setTimeout(()=>{
+    if (S.boardPop === pop) { S.boardPop = null; render(); }
+  }, 1300);
+}
+
+function showCenterPop(value){
+  const pop = {value, t0:Date.now()};
+  S.centerPop = pop;
+  setTimeout(()=>{
+    if (S.centerPop === pop) { S.centerPop = null; render(); }
+  }, 1300);
+}
+
+function setGameOver(over){
+  S.gameOver = over;
+  S.showEndButtons = false;
+  S.winOverlayDismissed = false;
+  if (over.winner) {
+    setTimeout(()=>{
+      if (S.gameOver === over) { S.showEndButtons = true; render(); }
+    }, 2000);
+  }
+}
+
+function doCapture(target, byColor, atSquare, attackerPiece){
+  if (target.type==='DECOY') { log('Die Attrappe wurde entlarvt \u2013 keine Belohnung.'); return; }
+  if (target.type==='K') {
+    setGameOver({winner: byColor, reason:'König geschlagen'});
+    log(`${label(byColor)} schlägt den König! ${label(byColor)} gewinnt sofort.`);
+    return;
+  }
+  const kVal = kristallValue(target);
+  const mVal = materialValue(target);
+  S.lostValue[target.color] += mVal;
+  if (target.type==='P') S.capturedPawns[target.color]++;
+  addKristalle(byColor, kVal);
+  const displayName = (target.type==='P' && target.tags.isDuo) ? 'Duo-Bauer (zählt als Turm)' : pieceName(target.type);
+  log(`${target.color==='w'?'Weiß':'Schwarz'}s ${displayName} wird geschlagen (+${kVal} Kristall${kVal>1?'e':''} für ${byColor==='w'?'Weiß':'Schwarz'}, Vorteilsleiste: ${mVal}).`);
+  showTrackerPop(mVal, target.color);
+  if (atSquare) showBoardPop(atSquare[0], atSquare[1], kVal);
+  maybeOfferGegenschlag(target.color, byColor, atSquare, attackerPiece);
+}
+
+function pieceName(t){
+  return {K:'König',Q:'Dame',R:'Turm',B:'Läufer',N:'Springer',P:'Bauer'}[t] || t;
+}
+
+function adjacentOwnSquares(color, [ar,ac]){
+  const result = [];
+  [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>{
+    const nr=ar+dr, nc=ac+dc;
+    if (inBounds(nr,nc)) {
+      const p = S.board[nr][nc];
+      if (p && p.color===color) result.push([nr,nc]);
+    }
+  });
+  return result;
+}
+
+function maybeOfferGegenschlag(victimColor, attackerColor, atSquare, attackerPiece){
+  const idx = S.hand[victimColor].findIndex(c=>c.id==='gegenschlag' && c.ready);
+  if (idx<0 || !atSquare) {
+    const notReady = S.hand[victimColor].some(c=>c.id==='gegenschlag' && !c.ready);
+    if (notReady) log(`[Hinweis] ${label(victimColor)} hat Gegenschlag, aber sie wurde erst diese Runde gezogen und ist noch nicht einsatzbereit.`);
+    return;
+  }
+  // Der Koenig kann nie Ziel eines Gegenschlags sein - er haette dann einen
+  // illegalen Schlag ausgefuehrt. Solche Zuege verhindert bereits die Zugpruefung.
+  if (attackerPiece && attackerPiece.type==='K') return;
+  if (adjacentOwnSquares(victimColor, atSquare).length===0) {
+    log(`[Hinweis] ${label(victimColor)} hat Gegenschlag, aber keine eigene Figur steht neben dem Angreifer.`);
+    return;
+  }
+  const card = S.hand[victimColor][idx];
+  const cost = Math.max(0, card.cost - (isBehind(victimColor)?1:0));
+  if (S.kristalle[victimColor] < cost) {
+    log(`[Hinweis] ${label(victimColor)} hat Gegenschlag, aber nur ${S.kristalle[victimColor]} von ${cost} benötigten Kristallen.`);
+    return;
+  }
+  S.mode = { type:'gegenschlag-offer', victimColor, cardIndex: idx, atSquare };
+}
+
+function clearExpiredFlags(movingColor){
+  const f = S.flags;
+  if (f.feldsperre && f.feldsperre.forColor===movingColor) { f.feldsperre=null; }
+  if (f.eiserneMauer && f.eiserneMauer.forColor===movingColor) { f.eiserneMauer=null; }
+  if (f.zeitdruck && f.zeitdruck.forColor===movingColor) { f.zeitdruck=null; }
+  if (f.bollwerk && opp(f.bollwerk.owner)===movingColor) { f.bollwerk=null; }
+  S.tempShieldProtect = null; // Schutzschild-Schutz gilt nur fuer den Rest des angreifenden Zugs
+}
+
+function computeBlockLandingSquare(sr, sc, tr, tc){
+  const dr = tr - sr, dc = tc - sc;
+  const isLine = (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc));
+  const dist = Math.max(Math.abs(dr), Math.abs(dc));
+  if (!isLine || dist <= 1) return [sr, sc]; // Sprung/Nachbarfeld-Angriff -> Figur bleibt auf Startfeld
+  const stepR = dr === 0 ? 0 : (dr > 0 ? 1 : -1);
+  const stepC = dc === 0 ? 0 : (dc > 0 ? 1 : -1);
+  return [tr - stepR, tc - stepC];
+}
+
+function getAvailableCaptureReactions(victimColor){
+  const options = [];
+  ['schutzschild','trugbild'].forEach(id=>{
+    const idx = S.hand[victimColor].findIndex(hc=>hc.id===id && hc.ready);
+    if (idx>=0) {
+      const card = S.hand[victimColor][idx];
+      const cost = Math.max(0, card.cost - (isBehind(victimColor)?1:0));
+      if (S.kristalle[victimColor] >= cost) options.push({id, idx, cost, name:card.name});
+    }
+  });
+  return options;
+}
+
+function wouldBeCheckmate(other){
+  if (!inCheck(S.board, other)) return false;
+  if (anyLegalMove(other)) return false;
+  const canEscape = abilityAvailable(other,'K');
+  return !(canEscape && emptyAdjacentToKing(other));
+}
+
+function endTurnChecks(movingColor){
+  clearExpiredFlags(movingColor);
+  const other = opp(movingColor);
+  // expire single-turn flags belonging to "next opponent turn" after that opponent's turn happens elsewhere;
+  S.checkInfo = inCheck(S.board, other) ? {color:other} : null;
+  if (!anyLegalMove(other)) {
+    const canEscape = abilityAvailable(other,'K');
+    if (S.checkInfo && !(canEscape && emptyAdjacentToKing(other))) {
+      setGameOver({winner:movingColor, reason:'Schachmatt'});
+      log(`Schachmatt! ${movingColor==='w'?'Weiß':'Schwarz'} gewinnt.`);
+    } else if (!S.checkInfo) {
+      setGameOver({winner:null, reason:'Patt'});
+      log('Patt \u2013 die Partie endet unentschieden.');
+    }
+  }
+  S.turn = other;
+  S.playedCardThisTurn = false;
+  // hand cards become ready
+  S.hand[other].forEach(c=>c.ready=true);
+  // zeitdruck resolved at draw/play time check
+}
+
+function emptyAdjacentToKing(color){
+  const k = findKing(S.board,color);
+  if (!k) return false;
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  return dirs.some(([dr,dc])=>{
+    const nr=k[0]+dr, nc=k[1]+dc;
+    if (!inBounds(nr,nc) || S.board[nr][nc]) return false;
+    const test = cloneBoard(S.board);
+    test[nr][nc] = test[k[0]][k[1]];
+    test[k[0]][k[1]] = null;
+    return !inCheck(test, color);
+  });
+}
+
+function hasDoubleMove(r,c){
+  const firstMoves = legalMovesFor(r,c,{});
+  return firstMoves.some(fm=>{
+    const temp = cloneBoard(S.board);
+    temp[fm.r][fm.c] = temp[r][c];
+    temp[r][c] = null;
+    const origBoard = S.board;
+    S.board = temp;
+    let secondCount;
+    try { secondCount = legalMovesFor(fm.r, fm.c, {}).length; }
+    finally { S.board = origBoard; }
+    return secondCount > 0;
+  });
+}
+
+function abilityAvailable(color, type){ return !S.abilitiesUsed[color][type]; }
+function readyCard(color, id){ return S.hand[color].some(c=>c.id===id && c.ready); }
+
+function modeEligibleSquares(){
+  if (!S.mode) return [];
+  const color = S.mode.color;
+  if (!color) return [];
+  const result = [];
+  const collectOwn = (test) => {
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+      const p = S.board[r][c];
+      if (p && p.color===color && test(p,r,c)) result.push([r,c]);
+    }
+  };
+  const collectEmpty = () => {
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++) if (!S.board[r][c]) result.push([r,c]);
+  };
+  switch(S.mode.type){
+    case 'upgrade-pawn':
+      collectOwn(p=>p.type==='P' && !p.tags.isDuo && (p.tags.stage||0)<2); break;
+    case 'beforderung':
+      collectOwn(p=>p.type==='P' && !p.tags.isDuo); break;
+    case 'springerinstinkt':
+    case 'doppelsprung-select':
+      collectOwn(p=>p.type==='N'); break;
+    case 'laeuferwandel':
+      collectOwn(p=>p.type==='B'); break;
+    case 'spiegelzug-select':
+      collectOwn((p,r,c)=>p.type==='B' && legalMovesFor(r,c,{spiegelzugStep1:true}).length>0); break;
+    case 'wiedergeburt': {
+      const pawnRow = color==='w'?6:1;
+      for (let c=0;c<8;c++) if (!S.board[pawnRow][c]) result.push([pawnRow,c]);
+      break;
+    }
+    case 'feldsperre':
+      collectEmpty(); break;
+    case 'duo-select1':
+      collectOwn((p,r,c)=>p.type==='P' && !p.tags.isDuo && [[0,1],[0,-1],[1,0],[-1,0]].some(([dr,dc])=>{
+        const nr=r+dr,nc=c+dc; return inBounds(nr,nc) && S.board[nr][nc] && S.board[nr][nc].color===color && S.board[nr][nc].type==='P' && !S.board[nr][nc].tags.isDuo;
+      })); break;
+    case 'duo-select2': {
+      result.push(S.mode.first); // eigene Wahl erneut anklickbar zum Abwählen
+      const [fr,fc] = S.mode.first;
+      [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr,dc])=>{
+        const nr=fr+dr, nc=fc+dc;
+        if (inBounds(nr,nc)) { const p=S.board[nr][nc]; if (p && p.color===color && p.type==='P' && !p.tags.isDuo) result.push([nr,nc]); }
+      });
+      break;
+    }
+    case 'bollwerk-select':
+      collectOwn(p=>p.type==='R'); break;
+    case 'kristallschub-select':
+      collectOwn(p=>p.type==='Q'); break;
+    case 'eisernemauer':
+      collectOwn(p=>p.type==='P'); break;
+    case 'doppelschritt-select':
+      collectOwn((p,r,c)=>p.type!=='K' && hasDoubleMove(r,c)); break;
+    case 'vorstoss-select': {
+      const homeRow = color==='w'?6:1;
+      collectOwn((p,r,c)=>p.type==='P' && !p.tags.isDuo && r!==homeRow &&
+        legalMovesFor(r,c,{vorstoss:true}).some(mm=>mm.special==='vorstoss'));
+      break;
+    }
+    case 'notausweichen': {
+      const k = findKing(S.board,color);
+      if (k) {
+        [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>{
+          const nr=k[0]+dr,nc=k[1]+dc;
+          if (inBounds(nr,nc) && !S.board[nr][nc]) {
+            const test=cloneBoard(S.board);
+            test[nr][nc]=test[k[0]][k[1]]; test[k[0]][k[1]]=null;
+            if (!inCheck(test,color)) result.push([nr,nc]);
+          }
+        });
+      }
+      break;
+    }
+    case 'gegenschlag-select':
+      if (S.mode.atSquare) {
+        adjacentOwnSquares(color, S.mode.atSquare).forEach(sq=>result.push(sq));
+      }
+      break;
+  }
+  return result;
+}
+
+function executeMove(r,c,m){
+  const piece = S.board[r][c];
+  const target = S.board[m.r][m.c];
+  if (piece) S.abilityMenu[piece.color] = false;   // Kreis-Menue schliesst erst beim tatsaechlichen Zug/Schlag
+  if (target) doCapture(target, piece.color, [m.r, m.c], piece);
+  S.board[m.r][m.c] = piece;
+  S.board[r][c] = null;
+  // promotion
+  if (piece.type==='P' && !piece.tags.isDuo) {
+    const lastRow = piece.color==='w' ? 0 : 7;
+    if (m.r===lastRow) {
+      piece.type='Q';
+      piece.tags = { promoted:true };   // alte Bauern-Aufwertungen entfallen, agiert als normale Dame
+      log(`${piece.color==='w'?'Weiß':'Schwarz'}er Bauer erreicht die gegnerische Grundreihe und wird zur Dame.`);
+    }
+  }
+  // Reine Zugbewegungen erscheinen nicht im Live-Ticker (nur Aktionen mit Spielwirkung)
+}
+
+function sqName(r,c){ return 'abcdefgh'[c] + (8-r); }
+
+/* ============ RENDER ============ */
+function render(){
+  const app = document.getElementById('app');
+  if (!S) { app.innerHTML=''; return; }
+
+  const diff = S.lostValue.w - S.lostValue.b; // positiv => Weiss hat mehr verloren (Weiss im Nachteil)
+  const clampDiff = Math.max(-18, Math.min(18, diff));
+  const pct = ((clampDiff+18)/36)*100;
+  const T = DRAW_DISCOUNT_THRESHOLD;               // Dangerzone-Schwelle (aktuell 6)
+  const dangerPctLeft = ((-T+18)/36)*100;
+  const dangerPctRight = ((T+18)/36)*100;
+  const blinkLeft = diff < -T;   // Schwarz in der Dangerzone
+  const blinkRight = diff > T;   // Weiss in der Dangerzone
+
+  let html = renderTopBar();
+
+
+  html += '<div class="layout">';
+  html += '<div class="board-col">';
+
+  html += '<div class="board-wrap">';
+  html += '<div class="board">';
+  const eligible = modeEligibleSquares();
+  const isEligible = (r,c) => eligible.some(([er,ec])=>er===r&&ec===c);
+  let preview2 = [];
+  if (S.mode && (S.mode.type==='doppelsprung-select' || S.mode.type==='spiegelzug-select') && S.mode.chosen) {
+    const [kr,kc] = S.mode.chosen;
+    const movingPiece = S.board[kr][kc];
+    const seen = new Set();
+    S.legalMoves.forEach(fm=>{
+      const temp = cloneBoard(S.board);
+      temp[fm.r][fm.c] = movingPiece;
+      temp[kr][kc] = null;
+      rawMoves(temp, fm.r, fm.c, {}).forEach(sm=>{
+        const key = sm.r+','+sm.c;
+        if (!seen.has(key)) { seen.add(key); preview2.push([sm.r,sm.c]); }
+      });
+    });
+  }
+  const isPreview2 = (r,c) => preview2.some(([pr,pc])=>pr===r&&pc===c);
+  for (let r=0;r<8;r++){
+    for (let c=0;c<8;c++){
+      const light = (r+c)%2===0;
+      const p = S.board[r][c];
+      let cls = 'sq ' + (light?'light':'dark');
+      if (S.selected && S.selected[0]===r && S.selected[1]===c) cls+=' selected';
+      if (S.mode && isEligible(r,c)) cls += ' eligible-target';
+      const isDest = S.legalMoves.find(m=>m.r===r&&m.c===c);
+      if (isDest) cls += isDest.capture ? ' dest-capture' : ' dest';
+      else if (isPreview2(r,c)) cls += ' dest-preview2';
+      html += `<div class="${cls}" onclick="onSquareClick(${r},${c})">`;
+      if (S.mode && isEligible(r,c)) {
+        html += `<span class="elig-fill" style="animation-delay:${animPhase(900)}ms"></span>`;
+      }
+      if (S.botGhost && S.botGhost.r===r && S.botGhost.c===c) {
+        const elapsed = Math.max(0, Date.now() - (S.botGhost.t0||Date.now()));
+        html += `<span class="bot-ghost" style="animation-delay:-${elapsed}ms">${S.botGhost.glyph}</span>`;
+      }
+      if (S.boardPop && S.boardPop.r===r && S.boardPop.c===c) html += `<span class="board-pop" style="animation-delay:-${Math.max(0,Date.now()-(S.boardPop.t0||Date.now()))}ms">+${S.boardPop.value}</span>`;
+      if (S.selected && S.selected[0]===r && S.selected[1]===c && canUpgradePawnAt(r,c)) {
+        const pw = S.board[r][c];
+        const afford = S.kristalle[pw.color] >= UPGRADE_COST;
+        const nextLvl = (pw.tags.stage||0)+1;
+        html += `<span class="upgrade-arrow${afford?'':' disabled'}" title="Bauer auf Stufe ${nextLvl} aufwerten (${UPGRADE_COST} Kristalle)" onclick="event.stopPropagation(); upgradePawnAt(${r},${c});">+Lvl.${nextLvl}</span>`;
+      }
+      if (S.flags.feldsperre && S.flags.feldsperre.square[0]===r && S.flags.feldsperre.square[1]===c) {
+        html += `<span class="blocked-badge">\u2715</span>`;
+      }
+      if (S.mode && S.mode.type==='wiedergeburt' && isEligible(r,c)) {
+        html += `<span class="ghost-pawn">${GLYPH[S.mode.color].P}</span>`;
+      }
+      if (p && p.type==='DECOY') {
+        html += `<span class="piece-chip decoy-chip">${PAWN_SILHOUETTE_SVG}</span>`;
+      } else if (p) {
+        const displayType = actsAsRook(p) ? 'R' : p.type;
+        const glyph = GLYPH[p.color][displayType];
+        const isActiveTurn = p.color===S.turn && !S.gameOver;
+        const isInCheck = p.type==='K' && S.checkInfo && S.checkInfo.color===p.color && !S.gameOver;
+        const isShielded = (S.tempShieldProtect && S.tempShieldProtect[0]===r && S.tempShieldProtect[1]===c) ||
+                            (S.flags.bollwerk && S.flags.bollwerk.square[0]===r && S.flags.bollwerk.square[1]===c) ||
+                            (S.flags.eiserneMauer && S.flags.eiserneMauer.owner===p.color && p.type==='P');
+        const botMark = (typeof S.botPlaced!=='undefined' && S.botPlaced && S.botPlaced[0]===r && S.botPlaced[1]===c) ? ' bot-placed' : '';
+        html += `<span class="piece-chip piece-${p.color} type-${displayType}${isActiveTurn?' active-turn':''}${isInCheck?' in-check':''}${p.tags.promoted?' promoted-queen':''}${botMark}"${isInCheck?` style="animation-delay:${animPhase(800)}ms"`:''}><span class="glyph">${glyph}</span></span>`;
+        if (isShielded) html += `<span class="shield-badge" title="Geschützt">${SHIELD_SVG}</span>`;
+        if (p.type==='Q' && S.pendingQueenBoost===p.color) html += `<span class="plus-badge" style="animation-delay:${animPhase(900)}ms">+</span>`;
+        if (p.tags.extraOrthogonal || p.tags.doubleJump) html += `<span class="mini-crown">${CROWN_SVG}</span>`;
+        let badge = '';
+        if (p.type==='P' && p.tags.stage) badge = 'Lvl. '+p.tags.stage;
+        if (p.tags.isDuo) badge = 'Duo';
+        if (p.tags.doubleJump) badge = (badge?badge+' ':'')+'2x';
+        if (p.tags.straightAvailable) badge = (badge?badge+' ':'')+'\u2665';
+        if (badge) html += `<span class="tag-badge">${badge}</span>`;
+      }
+      html += '</div>';
+    }
+  }
+  html += '</div>'; // board
+  const botActive = (typeof botColor!=='undefined' && botColor);
+  const hintOwner = S.mode ? S.mode.color : null;
+  const hintIsBots = botActive && hintOwner && hintOwner===botColor;
+  let hintText = '';
+  if (S.mode && !hintIsBots) hintText = modeHintText();
+  else if (S.chainHint && !S.mode && !(botActive && S.turn===botColor)) hintText = 'Zweiter Zug/Sprung verfügbar \u2013 wähle jetzt das zweite Ziel für dieselbe Figur.';
+  S.activeHint = hintText || '';
+  if (S.centerPop) html += `<span class="center-pop" style="animation-delay:-${Math.max(0,Date.now()-(S.centerPop.t0||Date.now()))}ms">+${S.centerPop.value}</span>`;
+  if (S.pendingCapture) {
+    const pc = S.pendingCapture;
+    const buttons = pc.options.map(o=>`<button onclick="resolvePendingCapture('${o.id}')">${o.name} (${o.cost})</button>`).join(' ');
+    html += `<div class="reaction-overlay">
+      <div class="reaction-box">
+        \u26A0 ${label(pc.victimColor)} kann den drohenden Schlag jetzt abwehren!
+        <div style="margin-top:8px;">
+          ${buttons}
+          <button class="secondary" onclick="resolvePendingCapture(null)">Nein, Schlag zulassen</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  if (S.mode && S.mode.type==='gegenschlag-offer') {
+    const gsCard = S.hand[S.mode.victimColor][S.mode.cardIndex];
+    const gsCost = gsCard ? Math.max(0, gsCard.cost - (isBehind(S.mode.victimColor)?1:0)) : 3;
+    html += `<div class="reaction-overlay">
+      <div class="reaction-box">
+        \u26A0 ${label(S.mode.victimColor)}: Deine Figur wurde geschlagen \u2013 Gegenschlag einsetzen?
+        <div style="margin-top:8px;">
+          <button onclick="resolveGegenschlag(true)">Gegenschlag (${gsCost})</button>
+          <button class="secondary" onclick="resolveGegenschlag(false)">Verzichten</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  if (S.pendingWarning) {
+    const WARN_TEXTS = {
+      'kristallraub-empty': 'Der Gegner hat keine Kristalle \u2013 Kristallraub hätte keine Wirkung.',
+      'eisernemauer-blocked': 'Diese Bauern sind durch Eiserne Mauer geschützt und können in diesem Zug nicht geschlagen werden.',
+      'bollwerk-blocked': 'Dieser Turm ist durch Bollwerk verankert und kann derzeit nicht geschlagen werden.',
+      'schutzschild-blocked': 'Diese Figur ist durch Schutzschild geschützt und kann in diesem Zug nicht mehr angegriffen werden.',
+      'feldsperre-blocked': 'Dieses Feld ist durch Feldsperre blockiert und darf in diesem Zug nicht betreten werden.',
+      'upgrade-nocrystals': 'Für die Aufwertung werden 4 Kristalle benötigt.',
+    };
+    const text = WARN_TEXTS[S.pendingWarning.type] || 'Diese Aktion ist gerade nicht möglich.';
+    html += `<div class="reaction-overlay">
+      <div class="reaction-box">
+        \u26A0 ${label(S.pendingWarning.color)}: ${text}
+        <div style="margin-top:8px;">
+          <button onclick="resolvePendingWarning()">OK</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  html += renderOnlineDialog();
+  if (S.botCardNotice) {
+    const bn = S.botCardNotice;
+    html += `<div class="reaction-overlay">
+      <div class="reaction-box">
+        <div style="font-size:11px; opacity:.85; margin-bottom:4px;">${label(bn.color)} spielt eine Karte</div>
+        <div style="font-size:15px; font-weight:800; margin-bottom:4px;">${bn.name}</div>
+        <div style="font-weight:400; font-size:11.5px; line-height:1.35;">${bn.desc}</div>
+        <div style="margin-top:10px;">
+          <button onclick="dismissBotCardNotice()">OK</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  if (S.gameOver && S.gameOver.winner && !S.winOverlayDismissed) {
+    html += `<div class="win-overlay">
+      <span class="win-crown">\u{1F451}</span>
+      <div class="win-text">${S.gameOver.reason}!<br>Glückwunsch, ${label(S.gameOver.winner)} hast gewonnen!</div>
+      ${S.showEndButtons ? `<div class="win-end-buttons">
+        <button onclick="newGame()">Neustart?</button>
+        <button class="secondary" onclick="dismissWinOverlay()">Einsicht?</button>
+      </div>` : ''}
+    </div>`;
+  }
+  html += '</div>'; // board-wrap
+  html += renderShieldRow();
+
+  html += '</div>'; // board-col
+
+  html += '<div class="panels">';
+  const tickTop = S.log.slice(0,2);
+  const tickRest = S.log.slice(2);
+  html += `<div class="log">
+    <div class="log-head"><span class="ticker-dot" style="animation-delay:${animPhase(1200)}ms"></span>LIVE TICKER</div>
+    ${tickTop.map(l=>`<div class="log-line">&bull; ${l}</div>`).join('')}
+    ${tickRest.length ? `<div class="log-more">
+      <button class="log-toggle" onclick="S.logOpen=!S.logOpen; render();">
+        ${S.logOpen ? '\u25BE Verlauf ausblenden' : '\u25B8 Verlauf anzeigen ('+tickRest.length+')'}
+      </button>
+      ${S.logOpen ? `<div class="log-old">${tickRest.map(l=>`<div class="log-line">&bull; ${l}</div>`).join('')}</div>` : ''}
+    </div>` : ''}
+  </div>`;
+  html += '</div>';
+  html += '<div class="panels" style="margin-top:520px;">';
+  html += renderDebugPanel();
+  html += '</div>';
+
+  html += '</div>'; // layout
+
+  app.innerHTML = html;
+
+  const foot = document.getElementById('footnote');
+  foot.textContent = 'Vereinfachte Digitalversion: Bauernumwandlung erfolgt automatisch zur Dame. Alle Kartentexte gemäß Regelwerk v5.';
+}
+
+function modeHintText(){
+  const m = S.mode;
+  if (!m) return '';
+  const map = {
+    'upgrade-pawn': 'Wähle einen eigenen Bauern für die Aufwertung (Stufe 1: Ferz-Diagonale + orthogonales Schlagen, Stufe 2: zusätzlich Turm-Bewegung).',
+    'beforderung': 'Wähle einen eigenen Bauern, der zum Wächter befördert wird.',
+    'springerinstinkt': 'Wähle einen eigenen Springer für die Zusatzbewegung.',
+    'laeuferwandel': 'Wähle einen eigenen Läufer für den einmaligen Geradeausschritt.',
+    'wiedergeburt': 'Wähle ein freies Feld auf deiner Bauernreihe für den zurückkehrenden Bauern.',
+    'duo-select1': 'Duo: Wähle zuerst einen eigenen Bauern. Danach wählst du einen direkt benachbarten zweiten Bauern – der zweite wird zum Duo-Bauern mit Turm-Bewegung, der erste verschwindet dabei.',
+    'duo-select2': 'Duo: Jetzt den zweiten, direkt benachbarten Bauern wählen \u2013 er wird zum Duo-Bauern (Turm-Bewegung). Nochmal auf den ersten klicken, um die Wahl aufzuheben.',
+    'feldsperre': 'Wähle ein Feld, das für den Gegner gesperrt wird.',
+    'eisernemauer': 'Eiserne Mauer: Tippe einen deiner Bauern an \u2013 dadurch werden ALLE deine Bauern für den nächsten gegnerischen Zug geschützt.',
+    'spiegelzug-select': 'Wähle deinen Läufer für den Spiegelzug.',
+    'vorstoss-select': 'Wähle einen Bauern außerhalb der Grundreihe für den Vorstoß.',
+    'bollwerk-select': 'Wähle deinen Turm, der sich verankert (Zug wird dadurch verbraucht).',
+    'kristallschub-select': 'Wähle deine Dame, um Kristallschub zu aktivieren \u2013 ihr nächster Schlag bringt +1 Kristall.',
+    'doppelsprung-select': 'Wähle deinen Springer für den Doppelsprung \u2013 nach dem ersten Sprung darfst du sofort ein zweites Mal springen (gelbe Kreise zeigen mögliche zweite Sprünge).',
+    'gegenschlag-offer': 'Gegenschlag verfügbar! Wähle unten, ob du ihn einsetzen willst.',
+    'gegenschlag-select': 'Wähle die eigene Nachbarfigur, die den Gegenschlag ausführt \u2013 unabhängig von ihren normalen Zugregeln.',
+    'notausweichen': 'Klicke ein freies Nachbarfeld deines Königs an.',
+    'doppelschritt-select': 'Wähle die Figur (nicht König), die diesen Zug zweimal ziehen darf.',
+  };
+  return map[m.type] || '';
+}
+
+function renderCrystalRing(color){
+  const n = S.kristalle[color];
+  const R = 26, cx = 30, cy = 30;
+  let dots = '';
+  for (let i=0;i<KRISTALL_CAP;i++){
+    // gleichmaessig im Kreis, Start oben
+    const ang = (-90 + i*(360/KRISTALL_CAP)) * Math.PI/180;
+    const x = cx + R*Math.cos(ang), y = cy + R*Math.sin(ang);
+    const filled = i < n;
+    dots += `<polygon points="0,-6 5.1,-1.8 3.2,5.1 -3.2,5.1 -5.1,-1.8"
+      transform="translate(${x.toFixed(2)},${y.toFixed(2)})"
+      fill="${filled?'#4bbf3a':'#d8d8d2'}" stroke="${filled?'#256b18':'#b4b2a9'}" stroke-width="1"/>`;
+  }
+  const isTurn = S.turn===color && !S.gameOver;
+  const chipBg = color==='w' ? 'var(--cream)' : 'var(--kupfer)';
+  const chipBd = color==='w' ? 'var(--anthrazit)' : '#7a4c10';
+  const glyphCol = color==='w' ? '#2c2c2a' : '#2b1400';
+  const cost = drawCostFor(color);
+  // Ohne Bot-Modus (zwei Spieler am Geraet) darf man auch fuer die andere Partei ziehen
+  const botOnNow = (typeof botColor!=='undefined' && botColor);
+  const turnOk = botOnNow ? (S.turn===color && color!==botColor) : true;
+  const canDraw = turnOk && !S.gameOver && S.kristalle[color]>=cost && S.hand[color].length<HAND_LIMIT
+                  && !S.pendingCapture && !S.pendingWarning && !S.mode;
+  const drawFlash = S.drawFlash && S.drawFlash.color===color;
+  const drawBtn = `<button class="tb-draw${canDraw?'':' tb-draw-dis'}${drawFlash?' tb-draw-flash':''}"
+      ${canDraw?'':'disabled'} title="Karte ziehen (${cost} Kristalle)"
+      onclick="drawCardFromTop('${color}')">+<span class="tb-draw-cost">${cost}</span></button>`;
+  const isNew = S.newCardFlash && S.newCardFlash.color===color;
+  const popTag = isNew ? `<span class="tb-slot-pop" style="animation-delay:-${Math.max(0,Date.now()-(S.newCardFlash.t0||Date.now()))}ms">+1</span>` : '';
+  const slotBox = `<div class="tb-cards">${drawBtn}${popTag}</div>`;
+  return `<div class="tb-partywrap${color==='b'?' tb-mirror':''}">${slotBox}<div class="tb-party${isTurn?' tb-active':''}" title="${label(color)}: ${n}/${KRISTALL_CAP} Kristalle, ${S.hand[color].length}/${HAND_LIMIT} Karten">
+    <svg viewBox="0 0 60 60" width="58" height="58">
+      <circle cx="30" cy="30" r="17" fill="${chipBg}" stroke="${chipBd}" stroke-width="2"/>
+      ${isTurn ? '<circle cx="30" cy="30" r="19" fill="none" stroke="#f4c400" stroke-width="2.5"/>' : ''}
+      <text x="30" y="37" text-anchor="middle" font-size="21" fill="${glyphCol}">\u265F</text>
+      ${dots}
+    </svg>
+    <span class="tb-count">${n}</span>
+  </div></div>`;
+}
+
+function drawCardFromTop(color){
+  const cost = drawCostFor(color);
+  const botOnNow = (typeof botColor!=='undefined' && botColor);
+  if (botOnNow && (S.turn!==color || color===botColor)) return;
+  if (S.gameOver || S.mode || S.pendingCapture || S.pendingWarning) return;
+  if (S.hand[color].length>=HAND_LIMIT || S.kristalle[color]<cost) return;
+  drawCard(color);
+  const f = {color, t0:Date.now()};
+  S.drawFlash = f;
+  setTimeout(()=>{ if(S.drawFlash===f){ S.drawFlash=null; render(); } }, 620);
+  render();
+}
+
+function setAiLevel(k){
+  if(AI_LEVELS[k]) aiLevel = k;
+  S.menuOpen = false;
+  log(`Bot-Stärke: ${AI_LEVELS[aiLevel].label}.`);
+  render();
+}
+
+function toggleMenu(){ S.menuOpen = !S.menuOpen; render(); }
+
+function animPhase(durMs){
+  return -(Date.now() % durMs);
+}
+
+function renderTracker(){
+  const diff = S.lostValue.b - S.lostValue.w;   // positiv => Schwarz im Nachteil (rechts)
+  const clampDiff = Math.max(-18, Math.min(18, diff));
+  const pct = ((clampDiff+18)/36)*100;
+  const T = DRAW_DISCOUNT_THRESHOLD;
+  const dangerPctLeft = ((-T+18)/36)*100;
+  const dangerPctRight = ((T+18)/36)*100;
+  const blinkLeft = diff < -T, blinkRight = diff > T;
+  return `<div class="tracker">
+    <div class="tracker-row"><span>Weiß Nachteil</span><span>Schwarz Nachteil</span></div>
+    <div class="tracker-bar-wrap">
+      ${S.trackerPop ? `<div class="tracker-pop" style="left:${pct}%; color:${S.trackerPop.side==='w'?'var(--anthrazit)':'var(--kupfer)'}; animation-delay:-${Math.max(0,Date.now()-(S.trackerPop.t0||Date.now()))}ms">+${S.trackerPop.value}</div>` : ''}
+      <div class="tracker-bar">
+        <div class="tracker-dangerzone${blinkLeft?' active-blink':''}" style="left:0%; width:${dangerPctLeft}%;${blinkLeft?`animation-delay:${animPhase(1000)}ms`:''}"></div>
+        <div class="tracker-dangerzone${blinkRight?' active-blink':''}" style="left:${dangerPctRight}%; width:${100-dangerPctRight}%;${blinkRight?`animation-delay:${animPhase(1000)}ms`:''}"></div>
+        <div class="tracker-yellow-mark" style="left:${dangerPctLeft}%;"></div>
+        <div class="tracker-yellow-mark" style="left:${dangerPctRight}%;"></div>
+      </div>
+      <div class="tracker-marker" style="left:calc(${pct}% - 1.5px)"></div>
+    </div>
+  </div>`;
+}
+
+function renderTopBar(){
+  const botOn = (typeof botColor!=='undefined' && botColor);
+  return `<div class="topbar"><div class="topbar-main">
+    <button class="tb-bot${botOn?' tb-bot-on':''}" onclick="toggleBot()"
+      title="${botOn?'Computergegner AN (spielt Schwarz)':'Computergegner AUS'}">
+      <svg viewBox="0 0 24 24" width="22" height="22">
+        <text x="12" y="18" text-anchor="middle" font-size="19" fill="currentColor">\u265F</text>
+      </svg>
+    </button>
+    <div class="tb-parties">
+      ${renderCrystalRing('w')}
+      ${renderCrystalRing('b')}
+    </div>
+    <div class="tb-menu-wrap">
+      <button class="tb-burger${S.menuOpen?' tb-close':''}" onclick="toggleMenu()" title="${S.menuOpen?'Schließen':'Menü'}">${S.menuOpen?'&#10005;':'<span class="tb-burger-lines"><i></i><i></i><i></i></span>'}</button>
+      ${S.menuOpen ? `<div class="tb-menu">
+        <button onclick="S.menuOpen=false; newGame();">Neustart</button>
+        <div style="font-size:9px;color:#8a8880;margin:4px 0 2px;font-weight:700;">Online spielen</div>
+        ${onlineCode
+          ? `<div style="font-size:11px;font-weight:800;text-align:center;padding:3px 0;">${onlineCode}</div>
+             <button class="secondary" onclick="copyGameCode()">Code kopieren</button>
+             <button class="secondary" onclick="onlineLeave()">Partie verlassen</button>`
+          : `<div style="font-size:12px;font-weight:900;text-align:center;letter-spacing:1px;padding:3px 0;">${S.gameCode}</div>
+             <button class="secondary" onclick="onlineStart(S.gameCode,'w')">Diese Partie hosten</button>
+             <button class="secondary" onclick="copyGameCode()">Code kopieren</button>
+             <button class="secondary" onclick="promptOnline('b')">Mit Code beitreten</button>`}
+        <div style="font-size:9px;color:#8a8880;margin:4px 0 2px;font-weight:700;">Bot-Stärke</div>
+        ${Object.keys(AI_LEVELS).map(k=>`<button class="${aiLevel===k?'':'secondary'}" onclick="setAiLevel('${k}')">${AI_LEVELS[k].label}</button>`).join('')}
+      </div>` : ''}
+    </div>
+  </div>${renderTracker()}</div>`;
+}
+
+function renderPanel(color){
+  const name = color==='w' ? 'Weiß' : 'Schwarz';
+  const active = S && S.turn===color && !S.gameOver;
+  let kr = '';
+  for (let i=0;i<KRISTALL_CAP;i++) kr += `<span class="kristall ${i<S.kristalle[color]?'':'empty'}"></span>`;
+
+  let html = `<div class="panel ${active?'active':''}">
+    <h2><span class="dot ${color}"></span>${name} ${isBehind(color)?'<span style="font-size:10px;color:#b0342a;">(im Nachteil \u2013 Aufholbonus)</span>':''}</h2>
+    <div class="krow"><span>Kristalle</span><div class="kristalle">${kr}</div></div>
+  `;
+
+  html += '<div class="cards">';
+  const handHidden = handIsHidden(color);
+  S.hand[color].forEach((card,i)=>{
+    if (handHidden) {
+      html += `<div class="card not-ready"><div class="card-body" style="font-style:italic;">Verdeckte Karte</div></div>`;
+      return;
+    }
+    const cost = Math.max(0, card.cost - (isBehind(color)?1:0));
+    const canPlay = active && card.ready && (card.type==='Reaktion' || !S.playedCardThisTurn) && S.kristalle[color]>=cost && !(S.flags.zeitdruck && S.flags.zeitdruck.forColor===color && card.type!=='Reaktion');
+    html += `<div class="card ${!card.ready?'not-ready':''}">
+      <div class="card-head type-${card.type}"><span>${card.type}</span><span>${cost}${cost!==card.cost?` <s style="opacity:.6">${card.cost}</s>`:''}</span></div>
+      <div class="card-body"><div class="name">${card.name}</div>${card.desc}</div>
+      <div class="card-actions">
+        ${(card.id==='schutzschild' || card.id==='trugbild' || card.id==='gegenschlag')
+          ? `<span style="font-size:10px; font-style:italic;">wird automatisch angeboten, wenn diese Figur angegriffen wird</span>`
+          : card.ready
+            ? `<button ${canPlay?'':'disabled'} onclick="playCard('${color}',${i})">Spielen</button>`
+            : `<span style="font-size:10px;">gezogen \u2013 ab nächster Runde spielbar</span>`}
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+const ABILITY_MODE = {
+  K:'notausweichen', Q:'kristallschub-select', R:'bollwerk-select',
+  B:'spiegelzug-select', N:'doppelsprung-select', P:'vorstoss-select'
+};
+
+function toggleAbility(color, type){
+  S.selectedCard = null;                  // Kartenauswahl verwerfen
+  // Bereits aktiv? -> abwaehlen
+  if (S.mode && S.mode.color===color && S.mode.type===ABILITY_MODE[type]) {
+    S.mode=null; S.selected=null; S.legalMoves=[];
+    render();
+    return;
+  }
+  openInfo.w = null; openInfo.b = null;   // Info-Zeile schliessen
+  // Laufende Faehigkeits-Auswahl verwerfen, damit frei gewechselt werden kann
+  if (S.mode && Object.values(ABILITY_MODE).includes(S.mode.type)) {
+    S.mode = null; S.selected = null; S.legalMoves = []; S.chainHint = false;
+  }
+  startAbility(color, type);
+}
+
+const ABILITY_LIST = [
+  ['K','Notausweichen'], ['Q','Kristallschub'], ['R','Bollwerk'],
+  ['B','Spiegelzug'], ['N','Doppelsprung'], ['P','Vorstoß']
+];
+
+function renderShieldRow(){
+  syncAbilityAvailability();
+  // Positionen wie in der Skizze: 3 oben, je 1 links/rechts, 1 unten
+  const R = 58;
+  const POS = [0,60,120,180,240,300].map(deg=>{
+    const rad=(deg-90)*Math.PI/180;
+    return {x:+(R*Math.cos(rad)).toFixed(1), y:+(R*Math.sin(rad)).toFixed(1)};
+  });
+
+  const half = (color)=>{
+    const active = S.turn===color && !S.gameOver;
+    const open = !!S.abilityMenu[color];
+    const left = ABILITY_LIST.filter(([t])=>!S.abilitiesUsed[color][t]).length;
+    const armedType = (S.mode && S.mode.color===color)
+      ? ABILITY_LIST.find(([t])=>S.mode.type===ABILITY_MODE[t]) : null;
+
+    let orbs = '';
+    ABILITY_LIST.forEach(([type,name],i)=>{
+      const used = S.abilitiesUsed[color][type];
+      const isArmed = armedType && armedType[0]===type;
+      const kingAlert = type==='K' && !used && S.checkInfo && S.checkInfo.color===color;
+      const dis = (!active || used) && !isArmed;
+      const p = POS[i];
+      const delay = open ? (i*45) : 0;
+      const style = open
+        ? `transform:translate(${p.x}px,${p.y}px) scale(1); opacity:1; transition-delay:${delay}ms;`
+        : `transform:translate(0,0) scale(0.25); opacity:0; pointer-events:none; transition-delay:${(5-i)*25}ms;`;
+      orbs += `<div class="orb-wrap" style="${style}">
+        <button class="orb orb-${color}${used?' orb-used':''}${dis?' orb-dis':''}${isArmed?' orb-armed':''}${kingAlert?' orb-armed':''}"
+          ${(isArmed||kingAlert)?`style="animation-delay:${animPhase(1100)}ms"`:''}
+          ${dis?'disabled':''}
+          title="${name}: ${ABILITY_INFO[type]}"
+          onclick="toggleAbility('${color}','${type}')">
+          <span class="orb-glyph orb-g-${type}">${GLYPH[color][type]}</span>
+        </button>
+        <span class="orb-i" onclick="event.stopPropagation(); toggleInfo('${color}','${type}');">i</span>
+      </div>`;
+    });
+
+    const kingEscapeReady = !S.abilitiesUsed[color]['K'] && S.checkInfo && S.checkInfo.color===color;
+    const center = open
+      ? `<span class="orb-x">&#10005;</span>`
+      : `<span class="orb-star${kingEscapeReady?' orb-star-alert':''}" style="${kingEscapeReady?`animation-delay:${animPhase(900)}ms`:''}">${kingEscapeReady?STAR_SVG_GREEN:STAR_SVG}<b>${left}</b></span>`;
+
+    return `<div class="orbmenu">
+      <div class="orb-field">
+        ${orbs}
+        <button class="orb-center${open?' orb-center-open':''}"
+          title="${open?'Fähigkeiten schließen':'Fähigkeiten öffnen ('+left+' offen)'}"
+          onclick="toggleAbilityMenu('${color}')">${center}</button>
+      </div>
+    </div>`;
+  };
+
+  return `<div class="cardzone">${renderCardRow()}${renderMessageArea()}</div>
+    <div class="orbrow">${half('w')}${half('b')}</div>`;
+}
+
+function ownHasPieceType(color, type){
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p = S.board[r][c];
+    if(p && p.color===color && p.type===type) return true;
+  }
+  return false;
+}
+
+/* Faehigkeiten, die an eine bestimmte Figur gebunden sind, automatisch als
+   verbraucht markieren, wenn diese Figur nicht mehr existiert (und wieder
+   freigeben, sobald z.B. ein Bauer zur Dame wird). Ein manueller Verbrauch
+   (S.abilitiesUsed[color][type+'_manual']) bleibt dagegen dauerhaft. */
+function syncAbilityAvailability(){
+  ['w','b'].forEach(color=>{
+    ['N','B','Q'].forEach(type=>{
+      if (S.abilitiesUsed[color][type+'_manual']) return;
+      S.abilitiesUsed[color][type] = !ownHasPieceType(color, type);
+    });
+  });
+}
+
+function toggleAbilityMenu(color){
+  const wasOpen = !!S.abilityMenu[color];
+  S.abilityMenu = {w:false, b:false};
+  if(!wasOpen) S.abilityMenu[color] = true;
+  render();
+}
+
+function dismissMessage(){
+  S.selectedCard = null;
+  openInfo.w = null; openInfo.b = null;
+  render();
+}
+
+function toggleCardSelect(color, idx){
+  if (handIsHidden(color)) return;          // fremde Hand bleibt verdeckt
+  if (S.selectedCard && S.selectedCard.color===color && S.selectedCard.index===idx){
+    S.selectedCard = null;
+  } else {
+    // aktive Faehigkeit / Figurenauswahl verwerfen
+    if (S.mode && S.mode.color) { S.mode = null; }
+    S.selected = null; S.legalMoves = []; S.chainHint = false;
+    S.selectedCard = {color, index: idx};
+    openInfo.w = null; openInfo.b = null;
+  }
+  render();
+}
+
+function playSelectedCard(){
+  const sc = S.selectedCard;
+  if (!sc) return;
+  S.selectedCard = null;
+  playCard(sc.color, sc.index);
+  render();
+}
+
+function modeHasTargets(type, color, extra){
+  const saved = S.mode;
+  S.mode = Object.assign({type, color}, extra||{});
+  let n = 0;
+  try { n = modeEligibleSquares().length; } catch(e) { n = 0; }
+  S.mode = saved;
+  return n > 0;
+}
+
+function cardPlayable(color, card){
+  if (!card || !card.ready) return false;
+  if (['schutzschild','trugbild','gegenschlag'].includes(card.id)) return false;
+  if (S.gameOver || S.mode || S.pendingCapture || S.pendingWarning) return false;
+  if (S.turn!==color || S.playedCardThisTurn) return false;
+  if (S.flags.zeitdruck && S.flags.zeitdruck.forColor===color && card.type!=='Reaktion') return false;
+  const cost = Math.max(0, card.cost - (isBehind(color)?1:0));
+  return S.kristalle[color] >= cost;
+}
+
+function handIsHidden(color){
+  // Bot-Gegner: seine Hand ist verdeckt
+  if (typeof botColor!=='undefined' && botColor === color) return true;
+  // Online-Partie: die Hand des Mitspielers ist verdeckt
+  if (typeof onlineCode!=='undefined' && onlineCode && color !== onlineColor) return true;
+  return false;
+}
+
+function renderCardRow(){
+  const half = (color)=>{
+    let out = `<div class="cardrow-half">`;
+    for (let i=0;i<HAND_LIMIT;i++){
+      const card = S.hand[color][i];
+      const sel = S.selectedCard && S.selectedCard.color===color && S.selectedCard.index===i;
+      const hidden = handIsHidden(color);
+      if (!card){
+        out += `<div class="cardfield cardfield-empty"></div>`;
+      } else if (hidden){
+        out += `<div class="cardfield cardfield-hidden" title="Verdeckte Karte"><span class="cardfield-back"></span></div>`;
+      } else {
+        const cost = Math.max(0, card.cost - (isBehind(color)?1:0));
+        const img = CARD_IMG[card.id];
+        const affordable = card.ready && S.kristalle[color] >= cost;
+        out += `<div class="cardfield type-${card.type}${affordable?' cardfield-lit':' cardfield-dim'}${sel?' cardfield-sel':''}${card.ready?'':' cardfield-wait'}"
+          title="${card.name} (${cost})" onclick="toggleCardSelect('${color}',${i})"
+          ${img?`style="background-image:url(data:image/webp;base64,${img})"`:''}>
+          ${img?'':`<span class="cardfield-name">${card.name}</span>`}
+          <span class="cardfield-badge">
+            <svg viewBox="0 0 12 12" width="12" height="12">
+              <polygon points="6,0.6 11.2,4.3 9.2,10.6 2.8,10.6 0.8,4.3"
+                fill="#4bbf3a" stroke="#256b18" stroke-width="1"/>
+            </svg>
+            <b>${cost}</b>
+          </span>
+        </div>`;
+      }
+    }
+    out += '</div>';
+    return out;
+  };
+  return `<div class="cardrow">${half('w')}${half('b')}</div>`;
+}
+
+/* Einziges Textfeld des Spiels - feste Hoehe, kein Layout-Sprung */
+function renderMessageArea(){
+  let txt = '', kind = '';
+  // Prioritaet: Faehigkeits-Info > Auswahl-Hinweis > Spielstatus
+  let infoTxt = '';
+  ['w','b'].forEach(c=>{
+    if (openInfo[c]) {
+      const nm = ABILITY_LIST.find(a=>a[0]===openInfo[c])[1];
+      infoTxt = `<span class="msg-tag">INFO:</span> <b>${nm}</b> (${label(c)}): ${ABILITY_INFO[openInfo[c]]}`;
+    }
+  });
+  const sc = S.selectedCard;
+  if (sc && S.hand[sc.color][sc.index]) {
+    const cd = S.hand[sc.color][sc.index];
+    const cost = Math.max(0, cd.cost - (isBehind(sc.color)?1:0));
+    const canPlay = cardPlayable(sc.color, cd);
+    const why = !cd.ready ? ' \u2013 erst ab der nächsten eigenen Runde spielbar'
+      : ['schutzschild','trugbild','gegenschlag'].includes(cd.id) ? ' \u2013 wird automatisch angeboten'
+      : (S.turn!==sc.color ? ' \u2013 nicht am Zug'
+      : ((S.flags.zeitdruck && S.flags.zeitdruck.forColor===sc.color) ? ' \u2013 durch Zeitdruck blockiert'
+      : (S.playedCardThisTurn ? ' \u2013 diesen Zug schon eine Karte gespielt'
+      : (S.kristalle[sc.color]<cost ? ' \u2013 zu wenig Kristalle' : ''))));
+    txt = `<span class="msg-tag">KARTE:</span> <b>${cd.name}</b> (${cost}) \u2013 ${cd.desc}${why}`
+        + (canPlay ? ` <button class="msg-play" onclick="event.stopPropagation(); playSelectedCard()">Spielen</button>` : '');
+    kind = 'msg-card';
+  }
+  else if (infoTxt) { txt = infoTxt; kind = 'msg-info'; }
+  else if (S.activeHint) { txt = S.activeHint; kind = 'msg-hint'; }
+  else if (S.gameOver) {
+    txt = `<b>${S.gameOver.reason}</b>${S.gameOver.winner ? ' \u2013 '+label(S.gameOver.winner)+' gewinnt!' : ''}`;
+    kind = 'msg-alert';
+  }
+  else if (S.checkInfo) { txt = `<b>Schach gegen ${label(S.checkInfo.color)}!</b>`; kind = 'msg-alert'; }
+  return `<div class="msg-area${txt?' msg-on '+kind:''}"${txt?' onclick="dismissMessage()"':''}><span>${txt}</span></div>`;
+}
+
+function renderDebugPanel(){
+  const colorName = debugColor==='w' ? 'WEISS' : 'SCHWARZ';
+  const colorHex = debugColor==='w' ? 'var(--anthrazit)' : 'var(--kupfer)';
+  let html = `<div class="panel" style="border-color:#b0342a;">
+    <h2 style="color:#b0342a;">\u26A0 TEST: Karte sofort spielen</h2>
+    <div style="font-size:10.5px; color:#5f5e5a; margin-bottom:6px;">Kostenlos, ohne Ziehen/Zug-Zwang \u2013 nur zum Testen der Karteneffekte.</div>
+    <div style="background:${colorHex}; color:#fff; text-align:center; font-weight:700; padding:6px; border-radius:6px; margin-bottom:8px;">
+      Aktives Debug-Ziel: ${colorName}
+    </div>
+    <div style="margin-bottom:8px;">
+      <button class="${debugColor==='w'?'':'secondary'}" onclick="setDebugColor('w')">Für Weiß</button>
+      <button class="${debugColor==='b'?'':'secondary'}" onclick="setDebugColor('b')">Für Schwarz</button>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:4px;">`;
+  CARD_DEFS.forEach((c,i)=>{
+    const suffix = '';
+    html += `<button class="secondary" style="font-size:10px; padding:4px 6px;" title="${c.desc}" onclick="debugPlayCard('${c.id}')">${c.name}${suffix}</button>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+/* ============ INTERAKTION ============ */
+function dismissBotCardNotice(){
+  S.botCardNotice = null;
+  render();
+  if (typeof scheduleBot === 'function') {
+    botBusy = false;          // sicherstellen, dass der Bot nicht blockiert bleibt
+    scheduleBot(400);
+  }
+}
+
+function resolvePendingWarning(){
+  S.pendingWarning = null;
+  render();
+}
+
+function dismissWinOverlay(){
+  S.winOverlayDismissed = true;
+  render();
+}
+
+function cancelMode(){ S.mode=null; S.selected=null; S.legalMoves=[]; render(); }
+
+function onSquareClick(r,c){
+  try {
+    onSquareClickInner(r,c);
+  } catch(e) {
+    console.error(e);
+    log('Ein interner Fehler ist aufgetreten \u2013 Auswahl wurde zurückgesetzt: ' + e.message);
+    S.mode=null; S.selected=null; S.legalMoves=[]; S.pendingOpts=null; S.chainHint=false;
+    render();
+  }
+}
+
+function onSquareClickInner(r,c){
+  if (S.gameOver) return;
+  if (onlineCode && S.turn !== onlineColor && !S.pendingCapture && !(S.mode && S.mode.type==='gegenschlag-offer')) {
+    log('Online: Der Mitspieler ist am Zug.');
+    render();
+    return;
+  }
+  if (S.pendingCapture || S.pendingWarning) {
+    log('Bitte zuerst die eingeblendete Frage über dem Brett beantworten.');
+    render();
+    return;
+  }
+  if (S.mode) { handleModeClick(r,c); return; }
+
+  const piece = S.board[r][c];
+  if (S.selected) {
+    const m = S.legalMoves.find(mm=>mm.r===r && mm.c===c);
+    if (m) {
+      const [sr,sc] = S.selected;
+      const opts = { ...(S.pendingOpts || {}) };
+      if (m.special==='straight') opts.consumeTag = 'straightAvailable';
+      const target = S.board[m.r][m.c];
+      if (target && target.type!=='DECOY') {
+        const options = getAvailableCaptureReactions(target.color);
+        if (options.length>0) {
+          S.pendingCapture = { sr, sc, m, opts, victimColor: target.color, options };
+          S.selected=null; S.legalMoves=[];
+          render();
+          return;
+        } else {
+          const notReadyId = ['schutzschild','trugbild'].find(id=>S.hand[target.color].some(hc=>hc.id===id && !hc.ready));
+          const notAffordable = ['schutzschild','trugbild']
+            .map(id=>S.hand[target.color].find(hc=>hc.id===id && hc.ready))
+            .find(hc=>hc);
+          if (notReadyId) {
+            log(`[Hinweis] ${label(target.color)} hat eine Reaktionskarte, aber sie wurde erst diese Runde gezogen und ist noch nicht einsatzbereit.`);
+          } else if (notAffordable) {
+            const cost = Math.max(0, notAffordable.cost - (isBehind(target.color)?1:0));
+            log(`[Hinweis] ${label(target.color)} hat ${notAffordable.name} einsatzbereit, aber nur ${S.kristalle[target.color]} von ${cost} benötigten Kristallen \u2013 Schlag findet ohne Unterbrechung statt.`);
+          }
+        }
+      }
+      commitMove(sr,sc,m,opts);
+      return;
+    }
+    if (piece && piece.color!==S.turn) {
+      const em = S.flags.eiserneMauer;
+      if (em && em.forColor===S.turn && piece.type==='P' && piece.color===em.owner) {
+        S.pendingWarning = {type:'eisernemauer-blocked', color:S.turn};
+        render(); return;
+      }
+      const bw = S.flags.bollwerk;
+      if (bw && bw.owner===piece.color && bw.square[0]===r && bw.square[1]===c) {
+        S.pendingWarning = {type:'bollwerk-blocked', color:S.turn};
+        render(); return;
+      }
+      if (S.tempShieldProtect && S.tempShieldProtect[0]===r && S.tempShieldProtect[1]===c) {
+        S.pendingWarning = {type:'schutzschild-blocked', color:S.turn};
+        render(); return;
+      }
+    }
+    const fsBlock = S.flags.feldsperre;
+    if (S.selected && fsBlock && fsBlock.forColor===S.turn && fsBlock.square[0]===r && fsBlock.square[1]===c) {
+      S.pendingWarning = {type:'feldsperre-blocked', color:S.turn};
+      render(); return;
+    }
+    if (piece && piece.color===S.turn) { selectPiece(r,c); return; }
+    S.selected=null; S.legalMoves=[]; render(); return;
+  }
+  if (piece && piece.color===S.turn) {
+    selectPiece(r,c);
+    if (S.legalMoves.length===0 && !(typeof botClicking!=='undefined' && botClicking)) {
+      log(`${pieceName(piece.type)} auf ${sqName(r,c)} hat gerade keinen möglichen Zug (blockiert oder würde den eigenen König im Schach lassen).`);
+      render();
+    }
+    return;
+  }
+  if (piece && piece.color!==S.turn) {
+    if (typeof botClicking!=='undefined' && botClicking) return;
+    // Fremde Figur angeklickt: erklaeren warum nichts passiert
+    if (typeof botColor!=='undefined' && botColor && S.turn===botColor) {
+      log('Der Computergegner ist am Zug \u2013 bitte kurz warten.');
+    } else {
+      log(`${label(S.turn)} ist am Zug \u2013 diese Figur gehört ${label(piece.color)}.`);
+    }
+    render();
+  }
+}
+
+function updateMidChainCheckState(moverColor){
+  const other = opp(moverColor);
+  S.checkInfo = inCheck(S.board, other) ? {color: other} : null;
+}
+
+function commitMove(sr,sc,m,opts){
+  const movedPiece = S.board[sr][sc];
+  const grantsChain = !opts.isSecondSegment && (opts.chain || (movedPiece.tags && movedPiece.tags.doubleJump));
+  executeMove(sr,sc,m);
+  if (opts.consumeAbility) { S.abilitiesUsed[S.turn][opts.consumeAbility]=true; }
+  if (opts.consumeCardIndex!=null) { discardCard(S.turn, opts.consumeCardIndex); }
+  if (opts.consumeTag) { S.board[m.r][m.c].tags[opts.consumeTag]=false; }
+  S.selected=null; S.legalMoves=[]; S.pendingOpts=null;
+
+  if (grantsChain && !wouldBeCheckmate(opp(S.turn))) {
+    S.selected=[m.r,m.c];
+    S.legalMoves = legalMovesFor(m.r,m.c,{});
+    S.pendingOpts = {isSecondSegment:true};
+    S.chainHint = true;
+    updateMidChainCheckState(S.turn);
+    render();
+    return;
+  }
+  S.chainHint = false;
+  finishTurnFlow();
+}
+
+function resolvePendingCapture(choiceId){
+  const p = S.pendingCapture;
+  if (!p) return;
+  S.pendingCapture = null;
+  if (choiceId) {
+    const opt = p.options.find(o=>o.id===choiceId);
+    if (opt) {
+      S.kristalle[p.victimColor] -= opt.cost;
+      discardCard(p.victimColor, opt.idx);
+      if (choiceId==='schutzschild') {
+        S.tempShieldProtect = [p.m.r, p.m.c];
+        log(`${label(p.victimColor)} setzt Schutzschild ein \u2013 der Schlag wird verhindert! ${label(S.turn)} muss anders ziehen und darf diese Figur diesen Zug nicht mehr anvisieren.`);
+        render();
+        return;
+      }
+      if (choiceId==='trugbild') {
+        const landing = computeBlockLandingSquare(p.sr, p.sc, p.m.r, p.m.c);
+        const attacker = S.board[p.sr][p.sc];
+        S.board[p.sr][p.sc] = null;
+        S.board[landing[0]][landing[1]] = attacker;
+        const samePos = landing[0]===p.sr && landing[1]===p.sc;
+        log(`${label(p.victimColor)} blockt mit Trugbild! ${label(S.turn)}s Figur ${samePos ? 'bleibt auf ihrem Feld stehen' : 'bleibt auf '+sqName(landing[0],landing[1])+' stehen'} \u2013 ihr Zug ist beendet.`);
+        S.selected=null; S.legalMoves=[]; S.pendingOpts=null; S.chainHint=false;
+        finishTurnFlow();
+        return;
+      }
+    }
+  }
+  commitMove(p.sr, p.sc, p.m, p.opts);
+}
+
+function closeAbilityInfo(){ if(openInfo.w||openInfo.b){ openInfo.w=null; openInfo.b=null; } }
+
+function selectPiece(r,c,opts){
+  closeAbilityInfo();
+  S.selectedCard = null;
+  S.selected=[r,c];
+  S.legalMoves = legalMovesFor(r,c,opts||{});
+  S.pendingOpts = null;
+  S.chainHint = false;
+  render();
+}
+
+function finishTurnFlow(){
+  const sendOnline = () => {
+    if (typeof onlineCode!=='undefined' && onlineCode) onlineSend();
+  };
+  if (S.gameOver) { render(); sendOnline(); return; }
+  if (S.mode && S.mode.type==='gegenschlag-offer') { render(); return; }
+  const mover = S.turn;
+  endTurnChecks(mover);
+  render();
+  sendOnline();          // erst NACH dem Zugwechsel senden
+}
+
+function discardCard(color, idx){
+  const [card] = S.hand[color].splice(idx,1);
+  S.discard.push(card);
+}
+
+/* ---- Karten ziehen / spielen ---- */
+function drawCard(color){
+  if (S.deck.length===0) { S.deck = shuffle(S.discard); S.discard=[]; }
+  S.kristalle[color]-=drawCostFor(color);
+  const card = S.deck.pop();
+  card.ready=false;
+  S.hand[color].push(card);
+  const flash = {color, t0:Date.now()};
+  S.newCardFlash = flash;
+  setTimeout(()=>{ if(S.newCardFlash===flash){ S.newCardFlash=null; render(); } }, 1200);
+  // Gegnerische Karten bleiben geheim - nur die eigene wird namentlich genannt
+  if (handIsHidden(color)) {
+    log(`${color==='w'?'Weiß':'Schwarz'} zieht eine Karte.`);
+  } else {
+    log(`${color==='w'?'Weiß':'Schwarz'} zieht die Karte "${card.name}".`);
+  }
+  render();
+}
+
+function playCard(color, idx, force){
+  if (S.gameOver || S.pendingCapture || S.pendingWarning) return;
+  const card = S.hand[color][idx];
+  if (!card) return;
+  if (!force) {
+    if (!card.ready) { log(`${label(color)}: Diese Karte wurde erst diese Runde gezogen \u2013 sie ist erst ab der nächsten eigenen Runde spielbar.`); render(); return; }
+    const isReaction = card.type==='Reaktion';
+    if (!isReaction) {
+      if (S.turn!==color) { log(`${label(color)}: Karte kann nur im eigenen Zug gespielt werden.`); render(); return; }
+      if (S.mode) { log(`${label(color)}: Erst die aktuell laufende Auswahl abschließen oder abbrechen, bevor eine neue Karte gespielt wird.`); render(); return; }
+      if (S.playedCardThisTurn) { log(`${label(color)}: Es wurde diesen Zug bereits eine Karte gespielt.`); render(); return; }
+      if (S.flags.zeitdruck && S.flags.zeitdruck.forColor===color) { log(`${label(color)}: Zeitdruck \u2013 diese Runde darf keine Karte gespielt werden.`); render(); return; }
+    }
+  }
+  const cost = force ? 0 : Math.max(0, card.cost - (isBehind(color)?1:0));
+  if (!force && S.kristalle[color] < cost) { log(`${label(color)}: Nicht genug Kristalle für diese Karte (Kosten: ${cost}).`); render(); return; }
+
+  const pay = () => { if (!force) S.kristalle[color]-=cost; };
+
+  switch(card.id){
+    case 'kristallsegen1':
+      pay(); addKristalle(color,2); log(`${label(color)} spielt Kristallsegen (+2 Kristalle).`);
+      discardCard(color, idx); markPlayed(color); break;
+    case 'kristallraub':
+      if (S.kristalle[opp(color)]<=0) {
+        S.pendingWarning = {type:'kristallraub-empty', color};
+        render();
+        return;
+      }
+      S.kristalle[opp(color)]--;
+      pay();
+      addKristalle(color,1);
+      log(`${label(color)} spielt Kristallraub.`);
+      showCenterPop(1);
+      discardCard(color, idx); markPlayed(color); break;
+    case 'damenopfer': {
+      const q = findFirst(color,'Q');
+      if (!q) return;
+      pay(); S.board[q[0]][q[1]] = null; addKristalle(color,4);
+      log(`${label(color)} opfert die Dame für 4 Kristalle.`);
+      discardCard(color, idx); markPlayed(color); break;
+    }
+    case 'beforderung':
+      if(!modeHasTargets('beforderung', color)){ log(`${label(color)}: Kein passender Bauer für Beförderung vorhanden.`); render(); return; }
+      pay(); S.mode = {type:'beforderung', color, cardIndex: idx}; break;
+    case 'springerinstinkt':
+      if(!modeHasTargets('springerinstinkt', color)){ log(`${label(color)}: Kein Springer vorhanden.`); render(); return; }
+      pay(); S.mode = {type:'springerinstinkt', color, cardIndex: idx}; break;
+    case 'laeuferwandel':
+      if(!modeHasTargets('laeuferwandel', color)){ log(`${label(color)}: Kein Läufer vorhanden.`); render(); return; }
+      pay(); S.mode = {type:'laeuferwandel', color, cardIndex: idx}; break;
+    case 'duo':
+      if(!modeHasTargets('duo-select1', color)){ log(`${label(color)}: Keine zwei benachbarten Bauern vorhanden.`); render(); return; }
+      pay(); S.mode = {type:'duo-select1', color, cardIndex: idx}; break;
+    case 'wiedergeburt':
+      if (S.capturedPawns[color]<=0) { log(`${label(color)}: Kein geschlagener Bauer zum Zurückholen.`); render(); return; }
+      if(!modeHasTargets('wiedergeburt', color)){ log(`${label(color)}: Kein freies Feld auf der Bauernreihe.`); render(); return; }
+      pay(); S.mode = {type:'wiedergeburt', color, cardIndex: idx}; break;
+    case 'feldsperre':
+      if(!modeHasTargets('feldsperre', color)){ log(`${label(color)}: Kein freies Feld vorhanden.`); render(); return; }
+      pay(); S.mode = {type:'feldsperre', color, cardIndex: idx}; break;
+    case 'trugbild':
+      // wird nicht manuell gespielt, sondern automatisch angeboten, wenn eine eigene Figur angegriffen wird
+      log(`${label(color)}: Trugbild wird automatisch angeboten, sobald eine eigene Figur angegriffen wird.`);
+      return;
+    case 'schutzschild':
+      // wird nicht manuell gespielt, sondern automatisch angeboten, wenn eine eigene Figur geschlagen werden soll
+      log(`${label(color)}: Schutzschild wird automatisch angeboten, sobald eine eigene Figur bedroht ist.`);
+      return;
+    case 'eisernemauer':
+      if(!modeHasTargets('eisernemauer', color)){ log(`${label(color)}: Keine eigenen Bauern mehr.`); render(); return; }
+      pay(); S.mode = {type:'eisernemauer', color, cardIndex: idx}; break;
+    case 'zeitdruck':
+      pay(); S.flags.zeitdruck = {forColor: opp(color)};
+      log(`${label(color)} spielt Zeitdruck \u2013 Gegner darf nächste Runde keine Karte spielen.`);
+      discardCard(color, idx); markPlayed(color); break;
+    case 'doppelschritt':
+      if(!modeHasTargets('doppelschritt-select', color)){ log(`${label(color)}: Keine Figur kann zweimal ziehen.`); render(); return; }
+      pay(); S.mode = {type:'doppelschritt-select', color, cardIndex: idx}; break;
+    case 'gegenschlag':
+      // reine Reaktionskarte: wird automatisch angeboten, sobald eine eigene Figur geschlagen wird
+      log(`${label(color)}: Gegenschlag wird automatisch angeboten, sobald eine eigene Figur geschlagen wurde.`);
+      return;
+  }
+  render();
+}
+
+function markPlayed(color, isReactionArm){
+  if (!isReactionArm) S.playedCardThisTurn = true;
+}
+
+let debugColor = 'w';
+function setDebugColor(c){ debugColor = c; render(); }
+function debugPlayCard(cardId){
+  if (!S) return;
+  S.mode=null; S.selected=null; S.legalMoves=[]; S.pendingOpts=null; S.chainHint=false;
+  const def = CARD_DEFS.find(c=>c.id===cardId);
+  if (!def) return;
+  const card = {...def, uid:'debug-'+Math.random(), ready:true};
+  S.hand[debugColor].push(card);
+  const idx = S.hand[debugColor].length-1;
+  if (cardId==='schutzschild' || cardId==='trugbild' || cardId==='gegenschlag') {
+    if (S.kristalle[debugColor] < def.cost) {
+      S.kristalle[debugColor] = def.cost;
+      log(`[TEST] ${label(debugColor)} bekommt außerdem ${def.cost} Kristalle gutgeschrieben (Debug), damit die Reaktion bezahlbar ist.`);
+    }
+    log(`[TEST] ${label(debugColor)} bekommt ${def.name} einsatzbereit in die Hand (Debug) \u2013 versuche jetzt, eine Figur von ${label(debugColor)} zu schlagen.`);
+    render();
+    return;
+  }
+  if (cardId==='kristallraub' || cardId==='eisernemauer' || cardId==='feldsperre' || cardId==='damenopfer' || cardId==='zeitdruck') {
+    card.ready = false;
+    log(`[TEST] ${label(debugColor)} bekommt ${def.name} in die Hand (Debug) \u2013 wie gezogen, erst ab der nächsten eigenen Runde spielbar.`);
+    render();
+    return;
+  }
+  if (cardId==='wiedergeburt' && S.capturedPawns[debugColor]<=0) {
+    S.capturedPawns[debugColor] = 1;
+    log(`[TEST] ${label(debugColor)} bekommt einen geschlagenen Bauern gutgeschrieben (Debug), damit Wiedergeburt testbar ist.`);
+  }
+  log(`[TEST] ${label(debugColor)} spielt "${def.name}" direkt (Debug, kostenlos).`);
+  playCard(debugColor, idx, true);
+  if (S.mode && S.mode.type==='wiedergeburt') {
+    const pawnRow = debugColor==='w' ? 6 : 1;
+    const occ = [];
+    for (let c=0;c<8;c++){
+      const p = S.board[pawnRow][c];
+      occ.push(`${sqName(pawnRow,c)}:${p ? (p.color+'/'+p.type) : 'frei'}`);
+    }
+    log(`[TEST] Bauernreihe von ${label(debugColor)} (Reihe ${8-pawnRow}) gerade: ${occ.join(', ')}`);
+    const elig = modeEligibleSquares();
+    if (elig.length===0) {
+      log(`[TEST-HINWEIS] Kein freies Feld auf der Bauernreihe gefunden. Bewege dort einen Bauern weg (oder lass einen schlagen), dann klappt Wiedergeburt.`);
+    } else {
+      log(`[TEST] ${elig.length} wählbare Ziel(e): ${elig.map(sq=>sqName(sq[0],sq[1])).join(', ')}`);
+    }
+  } else if (S.mode && S.mode.type) {
+    const elig = modeEligibleSquares();
+    if (elig.length===0) {
+      log(`[TEST-WARNUNG] Keine wählbaren Felder/Figuren für "${def.name}" gefunden (Modus: ${S.mode.type}, Farbe: ${label(debugColor)}).`);
+    } else {
+      log(`[TEST] ${elig.length} wählbare Ziel(e) gefunden: ${elig.map(sq=>sqName(sq[0],sq[1])).join(', ')}`);
+    }
+  }
+  render();
+}
+function label(color){ return color==='w'?'Weiß':'Schwarz'; }
+function findFirst(color, type){
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+    const p=S.board[r][c]; if (p && p.color===color && p.type===type) return [r,c];
+  }
+  return null;
+}
+
+/* ---- Fähigkeiten ---- */
+function startAbility(color, type){
+  if (S.gameOver || S.turn!==color || S.mode) { log('Fähigkeit gerade nicht verfügbar.'); render(); return; }
+  if (type==='K') { S.mode = {type:'notausweichen', color}; }
+  else if (type==='Q') { S.mode = {type:'kristallschub-select', color}; }
+  else if (type==='R') { S.mode = {type:'bollwerk-select', color}; }
+  else if (type==='B') { S.mode = {type:'spiegelzug-select', color}; }
+  else if (type==='N') { S.mode = {type:'doppelsprung-select', color}; }
+  else if (type==='P') { S.mode = {type:'vorstoss-select', color}; }
+  render();
+}
+
+function canUpgradePawnAt(r,c){
+  const p = S.board[r][c];
+  if (!p || p.type!=='P' || p.tags.isDuo) return false;
+  if ((p.tags.stage||0) >= 2) return false;
+  if (p.color !== S.turn) return false;
+  if (S.gameOver || S.mode || S.pendingCapture || S.pendingWarning) return false;
+  return true;
+}
+
+function upgradePawnAt(r,c){
+  if (!canUpgradePawnAt(r,c)) return;
+  const p = S.board[r][c];
+  if (S.kristalle[p.color] < UPGRADE_COST) {
+    S.pendingWarning = {type:'upgrade-nocrystals', color:p.color};
+    render(); return;
+  }
+  S.kristalle[p.color] -= UPGRADE_COST;
+  p.tags.stage = (p.tags.stage||0)+1;
+  log(`${label(p.color)} wertet einen Bauern auf Stufe ${p.tags.stage} auf (${UPGRADE_COST} Kristalle).`);
+  S.selected=null; S.legalMoves=[];
+  render();
+}
+
+function startUpgradePawn(color){
+  if (S.gameOver || S.turn!==color || S.mode) { render(); return; }
+  S.mode = {type:'upgrade-pawn', color};
+  render();
+}
+
+/* ---- Mode-Klicks ---- */
+function handleModeClick(r,c){
+  const m = S.mode;
+  const piece = S.board[r][c];
+
+  if (m.type==='gegenschlag-offer') return; // handled via buttons
+
+  if (m.type==='upgrade-pawn') {
+    if (!piece || piece.color!==m.color || piece.type!=='P' || (piece.tags.stage||0)>=2) return;
+    S.kristalle[m.color]-=UPGRADE_COST;
+    piece.tags.stage = (piece.tags.stage||0)+1;
+    log(`${label(m.color)} wertet einen Bauern auf Stufe ${piece.tags.stage} auf.`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='beforderung') {
+    if (!piece || piece.color!==m.color || piece.type!=='P') return;
+    piece.tags.stage=2;
+    discardCard(m.color, m.cardIndex); markPlayed(m.color);
+    log(`${label(m.color)} befördert einen Bauern direkt zum Wächter (Stufe 2).`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='springerinstinkt') {
+    if (!piece || piece.color!==m.color || piece.type!=='N') return;
+    piece.tags.extraOrthogonal=true;
+    discardCard(m.color, m.cardIndex); markPlayed(m.color);
+    log(`${label(m.color)}er Springer erhält Springerinstinkt.`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='laeuferwandel') {
+    if (!piece || piece.color!==m.color || piece.type!=='B') return;
+    piece.tags.straightAvailable=true;
+    discardCard(m.color, m.cardIndex); markPlayed(m.color);
+    log(`${label(m.color)}er Läufer kann einmalig gerade ziehen.`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='wiedergeburt') {
+    const pawnRow = m.color==='w' ? 6 : 1;
+    if (r!==pawnRow || piece) return;
+    S.board[r][c] = {type:'P', color:m.color, tags:{stage:0}};
+    S.capturedPawns[m.color]--;
+    discardCard(m.color, m.cardIndex); markPlayed(m.color);
+    log(`${label(m.color)} lässt einen Bauern auf der Bauernreihe wiederauferstehen.`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='eisernemauer') {
+    if (!piece || piece.color!==m.color || piece.type!=='P') return;
+    S.flags.eiserneMauer = {owner: m.color, forColor: opp(m.color)};
+    discardCard(m.color, m.cardIndex); markPlayed(m.color);
+    log(`${label(m.color)} aktiviert Eiserne Mauer \u2013 alle eigenen Bauern sind für den nächsten gegnerischen Zug geschützt.`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='feldsperre') {
+    if (piece) return;
+    S.flags.feldsperre = {square:[r,c], forColor:opp(m.color)};
+    discardCard(m.color, m.cardIndex); markPlayed(m.color);
+    log(`${label(m.color)} sperrt Feld ${sqName(r,c)} für den Gegner.`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='duo-select1') {
+    if (!piece || piece.color!==m.color || piece.type!=='P' || piece.tags.isDuo) return;
+    S.mode = {type:'duo-select2', color:m.color, cardIndex:m.cardIndex, first:[r,c]};
+    render(); return;
+  }
+  if (m.type==='duo-select2') {
+    const [fr,fc] = m.first;
+    if (r===fr && c===fc) {
+      // gleiche Figur nochmal angeklickt -> Auswahl des ersten Bauern aufheben
+      S.mode = {type:'duo-select1', color:m.color, cardIndex:m.cardIndex};
+      render(); return;
+    }
+    if (!piece || piece.color!==m.color || piece.type!=='P' || piece.tags.isDuo) return;
+    const adjacent = (Math.abs(fr-r)+Math.abs(fc-c))===1;
+    if (!adjacent) {
+      // stattdessen einen anderen ersten Bauern waehlen
+      S.mode = {type:'duo-select2', color:m.color, cardIndex:m.cardIndex, first:[r,c]};
+      render(); return;
+    }
+    S.board[fr][fc] = null;
+    piece.tags.isDuo = true;
+    discardCard(m.color, m.cardIndex); markPlayed(m.color);
+    log(`${label(m.color)} verschmilzt zwei Bauern zu Duo (Turm-Bewegung, zählt fortan als Turm-Wertigkeit).`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='doppelschritt-select') {
+    if (m.chosen) {
+      const [pr,pc] = m.chosen;
+      const dest = legalMovesFor(pr,pc,{}).find(d=>d.r===r&&d.c===c);
+      if (dest) {
+        executeMove(pr,pc,dest);
+        discardCard(m.color, m.cardIndex); markPlayed(m.color);
+        S.mode=null;
+        S.selected=[dest.r,dest.c];
+        S.legalMoves=legalMovesFor(dest.r,dest.c,{});
+        S.pendingOpts={isSecondSegment:true};
+        S.chainHint=true;
+        updateMidChainCheckState(m.color);
+        render(); return;
+      }
+      if (piece && piece.color===m.color && piece.type!=='K' && hasDoubleMove(r,c)) {
+        S.mode = {type:'doppelschritt-select', color:m.color, cardIndex:m.cardIndex, chosen:[r,c]};
+        S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{});
+        render(); return;
+      }
+      S.mode = {type:'doppelschritt-select', color:m.color, cardIndex:m.cardIndex, chosen:null};
+      S.selected=null; S.legalMoves=[];
+      render(); return;
+    }
+    if (!piece || piece.color!==m.color || piece.type==='K' || !hasDoubleMove(r,c)) return;
+    S.mode = {type:'doppelschritt-select', color:m.color, cardIndex:m.cardIndex, chosen:[r,c]};
+    S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{});
+    render(); return;
+  }
+  if (m.type==='bollwerk-select') {
+    if (!piece || piece.color!==m.color || piece.type!=='R') return;
+    S.flags.bollwerk = {square:[r,c], owner:m.color};
+    S.abilitiesUsed[m.color]['R']=true;
+    log(`${label(m.color)} verankert einen Turm (Bollwerk).`);
+    S.mode=null; finishTurnFlow(); return;
+  }
+  if (m.type==='kristallschub-select') {
+    if (!piece || piece.color!==m.color || piece.type!=='Q') return;
+    S.abilitiesUsed[m.color]['Q']=true; S.abilitiesUsed[m.color]['Q_manual']=true;
+    S.abilityMenu[m.color]=false;
+    S.pendingQueenBoost = m.color;
+    log(`${label(m.color)} aktiviert Kristallschub \u2013 nächster Damen-Schlag bringt +1 Kristall.`);
+    S.mode=null; render(); return;
+  }
+  if (m.type==='spiegelzug-select') {
+    if (m.chosen) {
+      const [pr,pc] = m.chosen;
+      const dest = legalMovesFor(pr,pc,{spiegelzugStep1:true}).find(d=>d.r===r&&d.c===c);
+      if (dest) {
+        executeMove(pr,pc,dest);
+        S.abilitiesUsed[m.color]['B']=true; S.abilitiesUsed[m.color]['B_manual']=true;
+        S.mode=null;
+        S.selected=[dest.r,dest.c];
+        S.legalMoves=legalMovesFor(dest.r,dest.c,{});
+        S.pendingOpts={isSecondSegment:true};
+        S.chainHint=true;
+        updateMidChainCheckState(m.color);
+        render(); return;
+      }
+      if (piece && piece.color===m.color && piece.type==='B' && legalMovesFor(r,c,{spiegelzugStep1:true}).length>0) {
+        S.mode = {type:'spiegelzug-select', color:m.color, chosen:[r,c]};
+        S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{spiegelzugStep1:true});
+        render(); return;
+      }
+      S.mode = {type:'spiegelzug-select', color:m.color, chosen:null};
+      S.selected=null; S.legalMoves=[];
+      render(); return;
+    }
+    if (!piece || piece.color!==m.color || piece.type!=='B') return;
+    if (legalMovesFor(r,c,{spiegelzugStep1:true}).length===0) { log('Dieser Läufer hat gerade kein freies andersfarbiges Nachbarfeld.'); return; }
+    S.mode = {type:'spiegelzug-select', color:m.color, chosen:[r,c]};
+    S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{spiegelzugStep1:true});
+    render(); return;
+  }
+  if (m.type==='doppelsprung-select') {
+    if (m.chosen) {
+      const [pr,pc] = m.chosen;
+      const dest = legalMovesFor(pr,pc,{}).find(d=>d.r===r&&d.c===c);
+      if (dest) {
+        executeMove(pr,pc,dest);
+        S.abilitiesUsed[m.color]['N']=true; S.abilitiesUsed[m.color]['N_manual']=true;
+        S.mode=null;
+        S.selected=[dest.r,dest.c];
+        S.legalMoves=legalMovesFor(dest.r,dest.c,{});
+        S.pendingOpts={isSecondSegment:true};
+        S.chainHint=true;
+        updateMidChainCheckState(m.color);
+        render(); return;
+      }
+      if (piece && piece.color===m.color && piece.type==='N') {
+        S.mode = {type:'doppelsprung-select', color:m.color, chosen:[r,c]};
+        S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{});
+        render(); return;
+      }
+      S.mode = {type:'doppelsprung-select', color:m.color, chosen:null};
+      S.selected=null; S.legalMoves=[];
+      render(); return;
+    }
+    if (!piece || piece.color!==m.color || piece.type!=='N') return;
+    S.mode = {type:'doppelsprung-select', color:m.color, chosen:[r,c]};
+    S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{});
+    render(); return;
+  }
+  if (m.type==='vorstoss-select') {
+    const homeRow = m.color==='w'?6:1;
+    if (m.chosen) {
+      const [pr,pc] = m.chosen;
+      const dest = legalMovesFor(pr,pc,{vorstoss:true}).find(d=>d.r===r&&d.c===c);
+      if (dest) {
+        executeMove(pr,pc,dest);
+        S.abilitiesUsed[m.color]['P']=true;
+        S.mode=null;
+        S.selected=null; S.legalMoves=[];
+        finishTurnFlow(); return;
+      }
+      if (piece && piece.color===m.color && piece.type==='P' && !piece.tags.isDuo && r!==homeRow) {
+        S.mode = {type:'vorstoss-select', color:m.color, chosen:[r,c]};
+        S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{vorstoss:true});
+        render(); return;
+      }
+      S.mode = {type:'vorstoss-select', color:m.color, chosen:null};
+      S.selected=null; S.legalMoves=[];
+      render(); return;
+    }
+    if (!piece || piece.color!==m.color || piece.type!=='P' || piece.tags.isDuo || r===homeRow) return;
+    S.mode = {type:'vorstoss-select', color:m.color, chosen:[r,c]};
+    S.selected=[r,c]; S.legalMoves=legalMovesFor(r,c,{vorstoss:true});
+    render(); return;
+  }
+  if (m.type==='notausweichen') {
+    const k = findKing(S.board, m.color);
+    if (!k) return;
+    const adjacent = Math.max(Math.abs(k[0]-r),Math.abs(k[1]-c))===1;
+    if (!adjacent || piece) return;
+    const test = cloneBoard(S.board);
+    test[r][c] = test[k[0]][k[1]];
+    test[k[0]][k[1]] = null;
+    if (inCheck(test, m.color)) { log('Dieses Feld ist weiterhin bedroht.'); return; }
+    S.board[r][c] = S.board[k[0]][k[1]];
+    S.board[k[0]][k[1]] = null;
+    S.abilitiesUsed[m.color]['K']=true;
+    S.abilityMenu[m.color]=false;
+    log(`${label(m.color)} nutzt Notausweichen.`);
+    S.checkInfo = null;
+    S.mode=null; render(); return;
+  }
+}
+
+function resolveGegenschlag(accept){
+  const m = S.mode;
+  if (!accept) { S.mode=null; finishTurnFlow(); return; }
+  const card = S.hand[m.victimColor][m.cardIndex];
+  const baseCost = card ? card.cost : 2;
+  const cost = Math.max(0, baseCost - (isBehind(m.victimColor)?1:0));
+  if (!card || S.kristalle[m.victimColor] < cost) { S.mode=null; finishTurnFlow(); return; }
+  // Kein gueltiges Ziel mehr? Dann Karte gar nicht erst verbrauchen.
+  if (adjacentOwnSquares(m.victimColor, m.atSquare).length===0) {
+    log(`${label(m.victimColor)}: Keine eigene Figur mehr neben dem Angreifer \u2013 Gegenschlag bleibt auf der Hand.`);
+    S.mode=null; finishTurnFlow(); return;
+  }
+  S.kristalle[m.victimColor]-=cost;
+  discardCard(m.victimColor, m.cardIndex);
+  S.mode = {type:'gegenschlag-select', color:m.victimColor, atSquare:m.atSquare};
+  render();
+}
+
+/* extend handleModeClick for gegenschlag-select */
+const _origHandle = handleModeClick;
+handleModeClick = function(r,c){
+  if (S.mode && S.mode.type==='gegenschlag-select') {
+    const [ar,ac] = S.mode.atSquare;
+    const attacker = S.board[ar][ac];
+    if (!attacker || attacker.color!==opp(S.mode.color)) { S.mode=null; finishTurnFlow(); return; }
+    // Der Spieler waehlt eine eigene Nachbarfigur, die den Gegenschlag ausfuehrt
+    const chosen = S.board[r][c];
+    const isNeighbour = Math.max(Math.abs(r-ar), Math.abs(c-ac))===1;
+    if (!chosen || chosen.color!==S.mode.color || !isNeighbour) return;
+    const counterColor = S.mode.color;
+    log(`${label(counterColor)} kontert mit Gegenschlag: ${pieceName(chosen.type)} schlägt ${pieceName(attacker.type)} auf ${sqName(ar,ac)}.`);
+    S.mode=null;
+    doCapture(attacker, counterColor, [ar, ac], chosen);
+    if (S.gameOver) { render(); return; }   // z.B. wenn dabei ein Koenig faellt
+    S.board[ar][ac] = chosen;   // eigene Figur rueckt auf das Feld des Angreifers
+    S.board[r][c] = null;
+    finishTurnFlow();
+    return;
+  }
+  _origHandle(r,c);
+};
+
+/* hook queen kristallschub into doCapture */
+const _origDoCapture = doCapture;
+doCapture = function(target, byColor, atSquare, attackerPiece){
+  _origDoCapture(target, byColor, atSquare, attackerPiece);
+  if (S.pendingQueenBoost===byColor) {
+    // check the mover was actually queen: naive - grant once regardless of which piece captured, tied to explicit activation
+    addKristalle(byColor,1);
+    log(`Kristallschub: +1 zusätzlicher Kristall.`);
+    S.pendingQueenBoost=null;
+  }
+};
+
+
+/* ================= SUCH-ENGINE FUER DEN BOT ================= */
+const AI_LEVELS = {
+  leicht: {time: 250,  depth: 2, slip: 0.45, label: 'Leicht'},
+  mittel: {time: 1200, depth: 3, slip: 0.18, label: 'Mittel'},
+  stark:  {time: 3500, depth: 4, slip: 0.00, label: 'Stark'}
+};
+let aiLevel = 'leicht';           // Startstufe
+function aiCfg(){ return AI_LEVELS[aiLevel] || AI_LEVELS.mittel; }
+
+function aiDoMove(mv){
+  const cap = S.board[mv.to[0]][mv.to[1]];
+  const pc  = S.board[mv.from[0]][mv.from[1]];
+  S.board[mv.to[0]][mv.to[1]] = pc;
+  S.board[mv.from[0]][mv.from[1]] = null;
+  return {cap, pc};
+}
+function aiUndoMove(mv,u){
+  S.board[mv.from[0]][mv.from[1]] = u.pc;
+  S.board[mv.to[0]][mv.to[1]] = u.cap;
+}
+
+/* schnelle Zuggenerierung fuer die Suche (ohne Karten-/Feldeffekte) */
+function aiMoves(color){
+  const out=[];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=S.board[r][c];
+    if(!p || p.color!==color || p.type==='DECOY') continue;
+    const raw = rawMoves(S.board, r, c, {});
+    for(const m of raw){
+      const t = S.board[m.r][m.c];
+      if(t && t.type==='K') continue;               // Koenig ist nie schlagbar
+      // Geschuetzte Ziele ueberspringen, sonst schlaegt der Bot ins Leere
+      if(S.tempShieldProtect && S.tempShieldProtect[0]===m.r && S.tempShieldProtect[1]===m.c) continue;
+      if(S.flags.bollwerk && S.flags.bollwerk.square[0]===m.r && S.flags.bollwerk.square[1]===m.c
+         && t && t.color===S.flags.bollwerk.owner) continue;
+      if(S.flags.eiserneMauer && t && t.type==='P' && t.color===S.flags.eiserneMauer.owner
+         && S.flags.eiserneMauer.forColor===color) continue;
+      if(S.flags.feldsperre && S.flags.feldsperre.forColor===color
+         && pathBlockedByFeldsperre(r, c, m.r, m.c, S.flags.feldsperre.square)) continue;
+      const mv = {from:[r,c], to:[m.r,m.c], cap:t};
+      const u = aiDoMove(mv);
+      const bad = inCheck(S.board, color);
+      aiUndoMove(mv,u);
+      if(!bad) out.push(mv);
+    }
+  }
+  // Zugordnung: Schlagzuege zuerst, wertvollste Beute voran
+  out.sort((a,b)=>{
+    const av = a.cap ? materialValue(a.cap)*10 - materialValue(a.cap===null?a.cap:S.board[a.from[0]][a.from[1]]||a.cap) : 0;
+    const bv = b.cap ? materialValue(b.cap)*10 : 0;
+    return bv - av;
+  });
+  return out;
+}
+
+/* Stellungsbewertung aus Sicht von 'me' */
+const AI_PST_PAWN = [
+  [0,0,0,0,0,0,0,0],
+  [50,50,50,50,50,50,50,50],
+  [10,10,20,30,30,20,10,10],
+  [5,5,10,25,25,10,5,5],
+  [0,0,0,20,20,0,0,0],
+  [5,-5,-10,0,0,-10,-5,5],
+  [5,10,10,-20,-20,10,10,5],
+  [0,0,0,0,0,0,0,0]
+];
+
+function aiEval(me){
+  const foe = opp(me);
+  let score = 0;
+
+  // Material + Aufstellung
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=S.board[r][c];
+    if(!p || p.type==='DECOY') continue;
+    const sign = p.color===me ? 1 : -1;
+    let v = p.type==='K' ? 0 : materialValue(p)*100;
+    if(p.type==='P'){
+      const row = p.color==='w' ? r : 7-r;
+      v += AI_PST_PAWN[row][c];
+      if(p.tags && p.tags.stage) v += p.tags.stage*120;   // Aufwertungen zaehlen
+    }
+    // Zentrumsnaehe leicht belohnen
+    const dc = Math.abs(3.5-c), dr = Math.abs(3.5-r);
+    v += Math.max(0, 12 - (dc+dr)*2);
+    score += sign*v;
+  }
+
+  // Bedrohte eigene Figuren bestrafen, bedrohte gegnerische belohnen
+  const myAtk = attackSquares(S.board, me);
+  const foeAtk = attackSquares(S.board, foe);
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=S.board[r][c];
+    if(!p || p.type==='DECOY' || p.type==='K') continue;
+    const key=r+','+c;
+    const val = materialValue(p)*100;
+    if(p.color===me && foeAtk.has(key)){
+      score -= myAtk.has(key) ? val*0.18 : val*0.55;   // ungedeckt = schlimmer
+    }
+    if(p.color===foe && myAtk.has(key)){
+      score += foeAtk.has(key) ? val*0.12 : val*0.35;
+    }
+  }
+
+  // Koenigssicherheit
+  if(inCheck(S.board, me)) score -= 60;
+  if(inCheck(S.board, foe)) score += 55;
+
+  // Beweglichkeit
+  score += (myAtk.size - foeAtk.size) * 3;
+
+  // Ressourcen
+  score += (S.kristalle[me]-S.kristalle[foe]) * 25;
+  score += (S.hand[me].length-S.hand[foe].length) * 18;
+  return score;
+}
+
+function aiSearch(color, depth, alpha, beta, me, deadline){
+  if(Date.now() > deadline) return {score: aiEval(me), timeout:true};
+  if(depth<=0) return {score: aiEval(me)};
+
+  const moves = aiMoves(color);
+  if(moves.length===0){
+    if(inCheck(S.board,color)) return {score: color===me ? -99999+depth : 99999-depth};
+    return {score:0};
+  }
+
+  let best=null, timeout=false;
+  if(color===me){
+    let val=-Infinity;
+    for(const mv of moves){
+      const u=aiDoMove(mv);
+      const res=aiSearch(opp(color), depth-1, alpha, beta, me, deadline);
+      aiUndoMove(mv,u);
+      if(res.timeout) timeout=true;
+      if(res.score>val){ val=res.score; best=mv; }
+      alpha=Math.max(alpha,val);
+      if(alpha>=beta || timeout) break;
+    }
+    return {score:val, move:best, timeout};
+  } else {
+    let val=Infinity;
+    for(const mv of moves){
+      const u=aiDoMove(mv);
+      const res=aiSearch(opp(color), depth-1, alpha, beta, me, deadline);
+      aiUndoMove(mv,u);
+      if(res.timeout) timeout=true;
+      if(res.score<val){ val=res.score; best=mv; }
+      beta=Math.min(beta,val);
+      if(alpha>=beta || timeout) break;
+    }
+    return {score:val, move:best, timeout};
+  }
+}
+
+/* Bester Zug mit iterativer Vertiefung */
+function aiBestMove(color){
+  const cfg = aiCfg();
+  const deadline = Date.now() + cfg.time;
+  let best=null, bestDepth=0;
+  for(let d=1; d<=cfg.depth; d++){
+    const res = aiSearch(color, d, -Infinity, Infinity, color, deadline);
+    if(res.move && !res.timeout){ best=res.move; bestDepth=d; }
+    if(Date.now()>deadline) break;
+  }
+  if(!best){
+    const ms=aiMoves(color);
+    best = ms.length?ms[0]:null;
+  }
+  // Auf niedrigen Stufen gelegentlich nicht den besten Zug waehlen
+  if(cfg.slip > 0 && Math.random() < cfg.slip){
+    const ms = aiMoves(color);
+    if(ms.length > 1){
+      // zweitbeste Haelfte: vermeidet grobe Selbstmordzuege, spielt aber ungenau
+      const scored = ms.map(mv=>{
+        const u = aiDoMove(mv);
+        const sc = aiEval(color);
+        aiUndoMove(mv,u);
+        return {mv, sc};
+      }).sort((a,b)=>b.sc-a.sc);
+      const from = Math.min(1, scored.length-1);
+      const to = Math.max(from+1, Math.ceil(scored.length*0.6));
+      const pool = scored.slice(from, to);
+      best = pool[Math.floor(Math.random()*pool.length)].mv;
+    }
+  }
+  return {move:best, depth:bestDepth};
+}
+
+
+/* ================= ONLINE-SPIEL (Spielcode, ohne Konto) ================= */
+const ONLINE_BASE = 'https://ntfy.sh/';
+let onlineCode = null;        // Spielcode
+let onlineColor = null;       // eigene Farbe: 'w' (Ersteller) oder 'b' (Beitretender)
+let onlineSeq = 0;            // eigener Zaehler
+let onlineSeenSeq = -1;       // zuletzt uebernommener Zaehler der Gegenseite
+let onlinePollTimer = null;
+let onlineLastId = null;
+let onlineStatus = '';
+
+function onlineTopic(){ return 'wandelschach-' + onlineCode; }
+
+function makeGameCode(){
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'WS-' + Array.from({length:5},()=>abc[Math.floor(Math.random()*abc.length)]).join('');
+}
+
+/* --- kompakte Zustandsuebertragung --- */
+function packState(){
+  const b = [];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p = S.board[r][c];
+    if(!p) continue;
+    b.push([r, c, p.type, p.color, p.tags && Object.keys(p.tags).length ? p.tags : 0]);
+  }
+  const hand = col => S.hand[col].map(cd=>[cd.id, cd.ready?1:0]);
+  return {
+    v: 1,
+    t: 'state',
+    seq: ++onlineSeq,
+    from: onlineColor,
+    b, turn: S.turn,
+    k: [S.kristalle.w, S.kristalle.b],
+    hw: hand('w'), hb: hand('b'),
+    deck: S.deck.map(c=>c.id),
+    disc: S.discard.map(c=>c.id),
+    lv: [S.lostValue.w, S.lostValue.b],
+    cp: [S.capturedPawns.w, S.capturedPawns.b],
+    au: S.abilitiesUsed,
+    fl: S.flags,
+    pc: S.playedCardThisTurn ? 1 : 0,
+    go: S.gameOver || 0,
+    ci: S.checkInfo || 0
+  };
+}
+
+function unpackState(d){
+  if(!d || d.v!==1) return;
+  S.board = Array.from({length:8},()=>Array(8).fill(null));
+  d.b.forEach(([r,c,type,color,tags])=>{
+    S.board[r][c] = {type, color, tags: tags || {}};
+  });
+  S.turn = d.turn;
+  S.kristalle = {w:d.k[0], b:d.k[1]};
+  const mk = arr => arr.map(([id,ready])=>{
+    const def = CARD_DEFS.find(x=>x.id===id) || {id, name:id, type:'Aktion', cost:0, desc:''};
+    return {...def, uid:'net-'+Math.random(), ready: !!ready};
+  });
+  S.hand = {w: mk(d.hw), b: mk(d.hb)};
+  const byId = id => { const def = CARD_DEFS.find(x=>x.id===id); return {...def, uid:'net-'+Math.random(), ready:true}; };
+  S.deck = d.deck.map(byId);
+  S.discard = d.disc.map(byId);
+  S.lostValue = {w:d.lv[0], b:d.lv[1]};
+  S.capturedPawns = {w:d.cp[0], b:d.cp[1]};
+  S.abilitiesUsed = d.au;
+  S.flags = d.fl;
+  S.playedCardThisTurn = !!d.pc;
+  S.gameOver = d.go || null;
+  S.checkInfo = d.ci || null;
+  S.mode = null; S.selected = null; S.legalMoves = [];
+  S.pendingCapture = null; S.pendingWarning = null; S.selectedCard = null;
+  render();
+}
+
+/* --- Senden --- */
+async function onlinePost(payload){
+  try{
+    await fetch(ONLINE_BASE + onlineTopic(), {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    onlineStatus = 'verbunden';
+    return true;
+  }catch(e){
+    onlineStatus = 'keine Verbindung';
+    log('Keine Verbindung zum Online-Dienst \u2013 Datei lokal öffnen statt über Vorschau-Link.');
+    render();
+    return false;
+  }
+}
+
+async function onlineSend(){
+  if(!onlineCode) return;
+  await onlinePost(packState());
+}
+
+async function onlineHello(){
+  if(!onlineCode) return;
+  await onlinePost({v:1, t:'hello', from:onlineColor, seq:0});
+}
+
+/* --- Empfangen (Abfrage alle 2 s) --- */
+async function onlinePoll(){
+  if(!onlineCode) return;
+  try{
+    const url = ONLINE_BASE + onlineTopic() + '/json?poll=1&since=' + (onlineLastId ? onlineLastId : '10m');
+    const res = await fetch(url);
+    const text = await res.text();
+    text.split('\n').filter(Boolean).forEach(line=>{
+      let msg; try{ msg = JSON.parse(line); }catch(e){ return; }
+      if(msg.id) onlineLastId = msg.id;
+      if(!msg.message) return;
+      let d; try{ d = JSON.parse(msg.message); }catch(e){ return; }
+      if(d.from === onlineColor) return;            // eigene Nachricht
+
+      if(d.t === 'hello'){
+        log('Gegenspieler ist beigetreten.');
+        // Der Gastgeber schickt dem Neuling sofort den aktuellen Stand
+        if(onlineColor === 'w') onlineSend();
+        render();
+        return;
+      }
+      if(d.t === 'bye'){ log('Gegenspieler hat die Partie verlassen.'); render(); return; }
+
+      if(d.seq <= onlineSeenSeq) return;            // schon gesehen
+      onlineSeenSeq = d.seq;
+      unpackState(d);
+      log('Zug des Gegenspielers empfangen.');
+      render();
+    });
+    onlineStatus = 'verbunden';
+  }catch(e){
+    onlineStatus = 'offline?';
+  }
+}
+
+function onlineStart(code, color){
+  onlineCode = (code||'').trim().toUpperCase();
+  if(!onlineCode) return;
+  onlineColor = color;
+  onlineSeq = 0; onlineSeenSeq = -1; onlineLastId = null;
+  if(onlinePollTimer) clearInterval(onlinePollTimer);
+  onlinePollTimer = setInterval(onlinePoll, 2000);
+  botColor = null;                                  // Bot aus im Online-Spiel
+  S.menuOpen = false;
+  log(`Online-Partie "${onlineCode}" – du spielst ${color==='w'?'Weiß':'Schwarz'}.`);
+  if(color==='w'){
+    newGame();
+    log(`Online-Partie ${onlineCode} eröffnet \u2013 warte auf den Gegenspieler.`);
+    onlineHello();
+    onlineSend();
+  } else {
+    log(`Partie ${onlineCode} beigetreten \u2013 warte auf den Spielstand.`);
+    onlineHello();
+    onlinePoll();
+  }
+  render();
+}
+
+function copyGameCode(){
+  const code = onlineCode || S.gameCode;
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(code);
+      log('Spielcode ' + code + ' in die Zwischenablage kopiert.');
+    } else {
+      const ta=document.createElement('textarea');
+      ta.value=code; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      log('Spielcode ' + code + ' kopiert.');
+    }
+  }catch(e){
+    log('Spielcode: ' + code + ' (bitte manuell notieren).');
+  }
+  render();
+}
+
+function onlineLeave(){
+  if(onlineCode) onlinePost({v:1, t:'bye', from:onlineColor, seq:0});
+  if(onlinePollTimer) clearInterval(onlinePollTimer);
+  onlinePollTimer = null;
+  onlineCode = null; onlineColor = null;
+  log('Online-Partie verlassen.');
+  render();
+}
+
+function onlineIsMyTurn(){
+  return !onlineCode || S.turn === onlineColor;
+}
+
+let onlineDialogColor = null;
+let onlineCodeInput = '';
+
+function promptOnline(color){
+  onlineDialogColor = color;
+  // Vorschlag: zufaelliger Code beim Erstellen
+  if(color==='w' && !onlineCodeInput){
+    const abc='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    onlineCodeInput = 'WS-' + Array.from({length:5},()=>abc[Math.floor(Math.random()*abc.length)]).join('');
+  }
+  S.menuOpen = false;
+  render();
+}
+
+function onlineDialogCancel(){
+  onlineDialogColor = null;
+  render();
+}
+
+function onlineDialogConfirm(){
+  const code = (onlineCodeInput||'').trim();
+  if(!code){ return; }
+  const col = onlineDialogColor;
+  onlineDialogColor = null;
+  onlineStart(code, col);
+}
+
+function onlineCodeChanged(v){ onlineCodeInput = v; }
+
+function renderOnlineDialog(){
+  if(!onlineDialogColor) return '';
+  const creating = onlineDialogColor==='w';
+  return `<div class="reaction-overlay">
+    <div class="reaction-box" style="min-width:240px;">
+      <div style="font-size:13px; margin-bottom:6px;">
+        ${creating ? 'Neue Online-Partie erstellen' : 'Online-Partie beitreten'}
+      </div>
+      <div style="font-weight:400; font-size:11px; line-height:1.35; margin-bottom:8px;">
+        ${creating
+          ? 'Diesen Code dem Mitspieler schicken. Du spielst Weiß.'
+          : 'Code des Mitspielers eingeben. Du spielst Schwarz.'}
+      </div>
+      <input id="onlineCodeField" value="${(onlineCodeInput||'').replace(/"/g,'&quot;')}"
+        oninput="onlineCodeChanged(this.value)"
+        placeholder="Spielcode"
+        style="width:100%; box-sizing:border-box; padding:7px 9px; font-size:14px;
+               font-family:-apple-system,sans-serif; font-weight:700; text-align:center;
+               border:1px solid var(--line); border-radius:7px; letter-spacing:1px;">
+      <div style="margin-top:10px;">
+        <button onclick="onlineDialogConfirm()">${creating ? 'Partie starten' : 'Beitreten'}</button>
+        <button class="secondary" onclick="onlineDialogCancel()">Abbrechen</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ================= COMPUTERGEGNER ================= */
+let botColor = null;          // null = aus, 'b' = Bot spielt Schwarz
+let botBusy = false;
+
+function toggleBot(){
+  botColor = botColor ? null : 'b';
+  S.menuOpen = false;
+  log(botColor ? 'Computergegner aktiviert (spielt Schwarz).' : 'Computergegner deaktiviert.');
+  render();
+  scheduleBot();
+}
+
+function markBotPlacement(r,c,fromR,fromC,glyph){
+  const tag = [r,c];
+  S.botPlaced = tag;
+  if (fromR!=null && glyph) {
+    const g = {r:fromR, c:fromC, glyph, t0: Date.now()};
+    S.botGhost = g;
+    setTimeout(()=>{ if(S.botGhost===g){ S.botGhost=null; render(); } }, 1350);
+  }
+  render();
+  setTimeout(()=>{ if(S.botPlaced===tag){ S.botPlaced=null; render(); } }, 750);
+}
+
+function botAllMoves(color){
+  const out=[];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=S.board[r][c];
+    if(p && p.color===color && p.type!=='DECOY')
+      legalMovesFor(r,c).forEach(m=>out.push({from:[r,c],to:[m.r,m.c]}));
+  }
+  return out;
+}
+
+function botPickMove(color){
+  const r = aiBestMove(color);
+  return r.move;
+}
+
+/* Bedrohungsanalyse: welche eigenen Figuren stehen im Feuer? */
+function botThreats(color){
+  const foeAtk = attackSquares(S.board, opp(color));
+  const ownAtk = attackSquares(S.board, color);
+  const list = [];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=S.board[r][c];
+    if(!p || p.color!==color || p.type==='DECOY') continue;
+    const key=r+','+c;
+    if(foeAtk.has(key)) list.push({r,c,piece:p,value:materialValue(p),defended:ownAtk.has(key)});
+  }
+  list.sort((a,b)=>b.value-a.value);
+  return list;
+}
+
+// Wartet der Bot auf eine Entscheidung des Menschen?
+function humanPromptOpen(){
+  if(S.pendingWarning) return true;
+  if(S.pendingCapture && S.pendingCapture.victimColor !== botColor) return true;
+  if(S.mode && S.mode.type==='gegenschlag-offer' && S.mode.victimColor !== botColor) return true;
+  return false;
+}
+
+function botHasPrompt(){
+  if(S.pendingCapture && S.pendingCapture.victimColor === botColor) return true;
+  if(S.mode && S.mode.type==='gegenschlag-offer' && S.mode.victimColor === botColor) return true;
+  return false;
+}
+
+let botWatchdog = null;
+
+function botWatchdogCheck(){
+  if(!botColor || S.gameOver) return;
+  if(S.botCardNotice || humanPromptOpen()) return;   // legitimes Warten
+  if(S.turn===botColor || botHasPrompt()){
+    // Bot ist dran, tut aber nichts -> neu anstossen
+    botBusy = false;
+    scheduleBot(200);
+  }
+}
+
+function armBotWatchdog(){
+  if(botWatchdog) clearTimeout(botWatchdog);
+  botWatchdog = setTimeout(botWatchdogCheck, 4000);
+}
+
+function scheduleBot(delay){
+  if(!botColor || S.gameOver || botBusy) return;
+  if(S.botCardNotice) return;              // wartet auf OK des Spielers
+  if(humanPromptOpen()) return;
+  armBotWatchdog();
+  if(!botHasPrompt() && S.turn !== botColor) return;
+  botBusy = true;
+  setTimeout(()=>{ botBusy=false; try{ botStep(); }catch(e){ console.error(e); } }, delay==null?1200:delay);
+}
+
+function botStep(){
+  if(!botColor || S.gameOver) return;
+  botClicking = true;
+  try { botStepInner(); } finally { botClicking = false; }
+}
+
+function botStepInner(){
+  if(!botColor || S.gameOver) return;
+  if(S.botCardNotice) return;
+  if(humanPromptOpen()) return;
+
+  // 1) Eigene Reaktionsangebote beantworten
+  if(S.pendingCapture && S.pendingCapture.victimColor===botColor){
+    const opts = S.pendingCapture.options;
+    if(opts.length && Math.random()<0.75) resolvePendingCapture(opts[0].id);
+    else resolvePendingCapture(null);
+    return scheduleBot(800);
+  }
+  if(S.mode && S.mode.type==='gegenschlag-offer' && S.mode.victimColor===botColor){
+    if(Math.random()<0.85){
+      resolveGegenschlag(true);
+      const e = modeEligibleSquares();
+      if(e.length) onSquareClick(e[0][0], e[0][1]);
+      else { S.mode=null; finishTurnFlow(); }
+    } else resolveGegenschlag(false);
+    return scheduleBot(800);
+  }
+
+  if(S.turn !== botColor) return;
+
+  // 2) Kettenzug fortsetzen, falls offen
+  if(S.chainHint && S.legalMoves.length){
+    const o = S.legalMoves;
+    const pick = o[Math.floor(Math.random()*o.length)];
+    const src = S.selected ? [S.selected[0], S.selected[1]] : null;
+    const mp = src ? S.board[src[0]][src[1]] : null;
+    const cg = mp ? GLYPH[botColor][actsAsRook(mp)?'R':mp.type] : null;
+    onSquareClick(pick.r, pick.c);
+    markBotPlacement(pick.r, pick.c, src?src[0]:null, src?src[1]:null, cg);
+    return scheduleBot(950);
+  }
+
+  // 3) Karte ziehen
+  if(S.kristalle[botColor] >= drawCostFor(botColor) && S.hand[botColor].length < HAND_LIMIT && Math.random()<0.6){
+    drawCard(botColor);
+    return scheduleBot(800);
+  }
+
+  // 4) Karte spielen - Auswahl nach Lage, nicht nach Zufall
+  const playable = ['kristallsegen1','kristallraub','eisernemauer','zeitdruck','damenopfer',
+                    'beforderung','springerinstinkt','wiedergeburt','laeuferwandel','feldsperre','duo'];
+  const handFull = S.hand[botColor].length >= HAND_LIMIT;
+  const threats = botThreats(botColor);
+  const worst = threats[0] || null;
+  const pawnsThreatened = threats.filter(t=>t.piece.type==='P').length;
+  const bigThreat = worst && worst.value>=3 && !worst.defended;
+
+  // Nutzen jeder Karte in der aktuellen Lage bewerten (0 = nicht spielen)
+  const cardScore = (cd)=>{
+    switch(cd.id){
+      case 'eisernemauer':   return pawnsThreatened>=2 ? 9 : (pawnsThreatened===1 ? 3 : 0);
+      case 'kristallraub':   return S.kristalle[opp(botColor)]>0 ? 6 : 0;
+      case 'kristallsegen1': return S.kristalle[botColor] <= KRISTALL_CAP-2 ? 7 : 1;
+      case 'zeitdruck':      return S.hand[opp(botColor)].some(c=>c.ready) ? 5 : 1;
+      case 'damenopfer': {
+        const q = threats.find(t=>t.piece.type==='Q' && !t.defended);
+        return q ? 8 : 0;                       // nur wenn die Dame ohnehin faellt
+      }
+      case 'feldsperre':     return bigThreat ? 6 : 1;
+      case 'wiedergeburt':   return S.capturedPawns[botColor]>0 ? 5 : 0;
+      case 'beforderung':    return bigThreat ? 1 : 6;
+      case 'duo':            return bigThreat ? 1 : 5;
+      case 'springerinstinkt':
+      case 'laeuferwandel':  return bigThreat ? 1 : 4;
+      default: return 2;
+    }
+  };
+
+  let bestIdx=-1, bestVal=0;
+  for(let i=0;i<S.hand[botColor].length;i++){
+    const cd = S.hand[botColor][i];
+    if(!cd.ready || !playable.includes(cd.id)) continue;
+    const cost = Math.max(0, cd.cost - (isBehind(botColor)?1:0));
+    if(S.kristalle[botColor] < cost) continue;
+    let v = cardScore(cd);
+    if(handFull) v += 3;                        // Hand freiraeumen
+    if(v > bestVal){ bestVal = v; bestIdx = i; }
+  }
+  if(bestIdx>=0 && bestVal>=4){
+    const i = bestIdx;
+    const cd = S.hand[botColor][i];
+    {
+    const notice = {color: botColor, name: cd.name, desc: cd.desc};
+    const handBefore = S.hand[botColor].length;
+    playCard(botColor, i);
+    if(S.pendingWarning && S.pendingWarning.color===botColor) resolvePendingWarning();
+    const started = (S.hand[botColor].length < handBefore) || (S.mode && S.mode.color===botColor);
+    if(started) S.botCardNotice = notice;   // nur echte Kartenspiele melden
+    // Auswahl-Schritte der Karte automatisch bedienen (z.B. Duo braucht zwei Klicks)
+    let guard = 0;
+    while(S.mode && S.mode.color===botColor && guard++ < 6){
+      let elig = modeEligibleSquares();
+      // im zweiten Auswahlschritt niemals die erste Wahl erneut anklicken (das wuerde sie aufheben)
+      if(S.mode.first){
+        const f = S.mode.first;
+        elig = elig.filter(sq=>!(sq[0]===f[0] && sq[1]===f[1]));
+      }
+      if(!elig.length){ S.mode = null; break; }
+      const pick = elig[0];
+      const before = S.mode.type;
+      onSquareClick(pick[0], pick[1]);
+      if(S.mode && S.mode.type===before && !S.mode.first) break;   // kein Fortschritt
+    }
+    // Sicherheitsnetz: haengende Auswahl beenden, damit keine Endlosschleife entsteht
+    if(S.mode && S.mode.color===botColor) S.mode = null;
+    if(S.pendingWarning && S.pendingWarning.color===botColor) resolvePendingWarning();
+    if(started){ render(); return scheduleBot(800); }   // Meldung sofort anzeigen
+    }
+  }
+
+  // 5) Bauern aufwerten - bevorzugt weit vorgerueckte, sichere Bauern
+  if(S.kristalle[botColor] >= UPGRADE_COST + 1 && !bigThreat){
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const p=S.board[r][c];
+      if(p && p.color===botColor && p.type==='P' && !p.tags.isDuo && (p.tags.stage||0)<2){
+        S.kristalle[botColor]-=UPGRADE_COST;
+        p.tags.stage=(p.tags.stage||0)+1;
+        log(`${label(botColor)} wertet einen Bauern auf Stufe ${p.tags.stage} auf (${UPGRADE_COST} Kristalle).`);
+        render();
+        return scheduleBot(800);
+      }
+    }
+  }
+
+  // 5b) Figurenfaehigkeit einsetzen - nach Lage priorisiert
+  {
+    const th = botThreats(botColor);
+    const rookThreat  = th.find(t=>t.piece.type==='R' && !t.defended);
+    const queenSafe   = !th.find(t=>t.piece.type==='Q');
+    // Bollwerk sofort, wenn ein Turm ungedeckt im Feuer steht
+    if(rookThreat && abilityAvailable(botColor,'R')){
+      startAbility(botColor,'R');
+      const e = modeEligibleSquares().filter(sq=>sq[0]===rookThreat.r && sq[1]===rookThreat.c);
+      const pick = e.length?e[0]:(modeEligibleSquares()[0]||null);
+      if(pick){ onSquareClick(pick[0],pick[1]); return scheduleBot(900); }
+      S.mode=null;
+    }
+    // Kristallschub, wenn die Dame sicher steht und Kristalle knapp sind
+    if(queenSafe && abilityAvailable(botColor,'Q') && S.kristalle[botColor]<=KRISTALL_CAP-2 && Math.random()<0.5){
+      startAbility(botColor,'Q');
+      const e = modeEligibleSquares();
+      if(e.length){ onSquareClick(e[0][0],e[0][1]); return scheduleBot(900); }
+      S.mode=null;
+    }
+  }
+  if(Math.random() < 0.18){
+    const abilityOrder = ['N','B','P'];           // Bewegungsfaehigkeiten nur gelegentlich
+    for(const type of abilityOrder){
+      if(!abilityAvailable(botColor, type)) continue;
+      startAbility(botColor, type);
+      if(!S.mode){                       // Kristallschub wirkt sofort ohne Auswahl
+        return scheduleBot(800);
+      }
+      const elig = modeEligibleSquares();
+      if(!elig.length){ S.mode = null; continue; }   // Faehigkeit gerade nicht nutzbar -> naechste probieren
+      const pick = elig[Math.floor(Math.random()*elig.length)];
+      onSquareClick(pick[0], pick[1]);
+      // Faehigkeiten mit Zugauswahl: erstes Ziel anklicken (Kette laeuft ueber Schritt 2 weiter)
+      if(S.mode && S.legalMoves && S.legalMoves.length){
+        const d = S.legalMoves[Math.floor(Math.random()*S.legalMoves.length)];
+        const src = S.selected ? [S.selected[0], S.selected[1]] : null;
+        const mp = src ? S.board[src[0]][src[1]] : null;
+        const cg = mp ? GLYPH[botColor][actsAsRook(mp)?'R':mp.type] : null;
+        onSquareClick(d.r, d.c);
+        markBotPlacement(d.r, d.c, src?src[0]:null, src?src[1]:null, cg);
+      }
+      return scheduleBot(950);
+    }
+    if(S.mode && S.mode.color===botColor) S.mode = null;
+  }
+
+  // 5c) Doppelschritt-Karte (mehrstufige Zugkette)
+  const dsIdx = S.hand[botColor].findIndex(c=>c.id==='doppelschritt' && c.ready);
+  if(dsIdx>=0 && Math.random()<0.5){
+    const cost = Math.max(0, S.hand[botColor][dsIdx].cost - (isBehind(botColor)?1:0));
+    if(S.kristalle[botColor] >= cost){
+      const dsCard = S.hand[botColor][dsIdx];
+      S.botCardNoticePending = {color: botColor, name: dsCard.name, desc: dsCard.desc};
+      playCard(botColor, dsIdx);
+      const elig = modeEligibleSquares();
+      if(elig.length){
+        const pick = elig[Math.floor(Math.random()*elig.length)];
+        onSquareClick(pick[0], pick[1]);
+        if(S.legalMoves && S.legalMoves.length){
+          const d = S.legalMoves[Math.floor(Math.random()*S.legalMoves.length)];
+          const src = S.selected ? [S.selected[0], S.selected[1]] : null;
+          const mp = src ? S.board[src[0]][src[1]] : null;
+          const cg = mp ? GLYPH[botColor][actsAsRook(mp)?'R':mp.type] : null;
+          onSquareClick(d.r, d.c);
+          markBotPlacement(d.r, d.c, src?src[0]:null, src?src[1]:null, cg);
+        }
+        if(S.botCardNoticePending){ S.botCardNotice = S.botCardNoticePending; S.botCardNoticePending = null; render(); }
+        return scheduleBot(950);
+      }
+      S.botCardNoticePending = null;
+      if(S.mode && S.mode.color===botColor) S.mode = null;
+    }
+  }
+
+  // 6) Ziehen
+  const mv = botPickMove(botColor);
+  if(!mv){ return; }
+  const movingPiece = S.board[mv.from[0]][mv.from[1]];
+  const gType = movingPiece ? (actsAsRook(movingPiece) ? 'R' : movingPiece.type) : null;
+  const gGlyph = gType ? GLYPH[botColor][gType] : null;
+  onSquareClick(mv.from[0], mv.from[1]);
+  setTimeout(()=>{
+    onSquareClick(mv.to[0], mv.to[1]);
+    markBotPlacement(mv.to[0], mv.to[1], mv.from[0], mv.from[1], gGlyph);
+    scheduleBot(950);
+  }, 700);
+}
+
+/* Nach jedem Klick des Menschen pruefen, ob der Bot dran ist */
+let botClicking = false;
+const _origOnSquareClick = onSquareClick;
+onSquareClick = function(r,c){
+  _origOnSquareClick(r,c);
+  scheduleBot();
+};
+const _origResolvePendingCapture = resolvePendingCapture;
+resolvePendingCapture = function(x){ _origResolvePendingCapture(x); scheduleBot(); };
+const _origResolveGegenschlag = resolveGegenschlag;
+resolveGegenschlag = function(x){ _origResolveGegenschlag(x); scheduleBot(); };
+const _origResolvePendingWarning = resolvePendingWarning;
+resolvePendingWarning = function(){ _origResolvePendingWarning(); scheduleBot(); };
+const _origUpgradePawnAt = upgradePawnAt;
+upgradePawnAt = function(r,c){ _origUpgradePawnAt(r,c); scheduleBot(); };
+const _origPlayCard = playCard;
+playCard = function(color, idx, force){ _origPlayCard(color, idx, force); scheduleBot(); };
+const _origDrawCard = drawCard;
+drawCard = function(color){ _origDrawCard(color); scheduleBot(); };
+
+newGame();
+</script>
+</body>
+</html>
