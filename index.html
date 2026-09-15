@@ -3003,6 +3003,10 @@ let onlineLastId = null;
 let onlineStatus = '';
 let onlineLogMark = 0;            // Stand des Tickers beim letzten Senden
 let onlinePendingNotice = null;   // zuletzt gespielte Karte (fuer den Gegner)
+let onlinePeerSeen = false;       // Gegenseite hat sich gemeldet
+let onlineTries = 0;              // Versuche bis zur ersten Antwort
+let onlineOkCount = 0;            // erfolgreiche Abrufe
+let onlineSeenIds = new Set();    // bereits verarbeitete Nachrichten
 
 function onlineTopic(){ return 'wandelschach-' + onlineCode; }
 
@@ -3044,7 +3048,9 @@ function packState(){
   const hand = col => S.hand[col].map(cd=>[cd.id, cd.ready?1:0]);
   // seit dem letzten Senden neu entstandene Ticker-Zeilen
   const newLines = Math.max(0, S.log.length - onlineLogMark);
-  const lg = S.log.slice(0, Math.min(newLines, 8));
+  // Verbindungsmeldungen sind lokal und werden nicht mituebertragen
+  const SKIP = ['beigetreten','Verbindung','verlassen','wieder aufgenommen','warte auf','Mitspieler','Online-Partie','Spielcode'];
+  const lg = S.log.slice(0, Math.min(newLines, 8)).filter(l=>!SKIP.some(k=>l.includes(k)));
   onlineLogMark = S.log.length;
   const nc = onlinePendingNotice; onlinePendingNotice = null;
   return {
@@ -3128,32 +3134,64 @@ async function onlineHello(){
 async function onlinePoll(){
   if(!onlineCode) return;
   try{
-    const url = ONLINE_BASE + onlineTopic() + '/json?poll=1&since=' + (onlineLastId ? onlineLastId : '10m');
+    const url = ONLINE_BASE + onlineTopic() + '/json?poll=1&since=' + (onlineLastId ? onlineLastId : '6h');
     const res = await fetch(url);
     const text = await res.text();
     text.split('\n').filter(Boolean).forEach(line=>{
       let msg; try{ msg = JSON.parse(line); }catch(e){ return; }
-      if(msg.id) onlineLastId = msg.id;
+      if(msg.id){
+        if(onlineSeenIds.has(msg.id)) return;      // schon verarbeitet
+        onlineSeenIds.add(msg.id);
+        if(onlineSeenIds.size > 200){              // Speicher begrenzen
+          onlineSeenIds = new Set(Array.from(onlineSeenIds).slice(-100));
+        }
+        onlineLastId = msg.id;
+      }
       if(!msg.message) return;
       let d; try{ d = JSON.parse(msg.message); }catch(e){ return; }
       if(d.from === onlineColor) return;            // eigene Nachricht
 
       if(d.t === 'hello'){
-        log('Gegenspieler ist beigetreten.');
-        // Der Gastgeber schickt dem Neuling sofort den aktuellen Stand
-        if(onlineColor === 'w') onlineSend();
+        onlinePeerSeen = true;
+        log(`${d.from==='w'?'Weiß':'Schwarz'} ist beigetreten.`);
+        // Jede Seite schickt dem Neuling sofort ihren aktuellen Stand
+        onlineSend();
         render();
         return;
       }
-      if(d.t === 'bye'){ log('Gegenspieler hat die Partie verlassen.'); render(); return; }
+      if(d.t === 'bye'){
+        onlinePeerSeen = false;
+        log(`${d.from==='w'?'Weiß':'Schwarz'} hat die Partie verlassen.`);
+        render(); return;
+      }
 
       if(d.seq <= onlineSeenSeq) return;            // schon gesehen
       onlineSeenSeq = d.seq;
       playOpponentUpdate(d);
     });
     onlineStatus = 'verbunden';
+    if(onlineOkCount === 0) log('Verbindung zum Online-Dienst steht.');
+    onlineOkCount++;
+
+    // Solange sich niemand gemeldet hat: Anmeldung wiederholen
+    if(!onlinePeerSeen && onlineCode){
+      onlineTries++;
+      if(onlineTries % 3 === 0){          // alle ~6 Sekunden
+        onlineHello();
+        if(onlineColor === 'w') onlineSend();
+      }
+      if(onlineTries === 15){
+        log('Noch kein Mitspieler \u2013 hat er denselben Code eingegeben?');
+        render();
+      }
+    }
   }catch(e){
-    onlineStatus = 'offline?';
+    onlineStatus = 'offline';
+    if(onlineOkCount === 0 && onlineTries < 3){
+      onlineTries++;
+      log('Keine Verbindung zum Online-Dienst. Seite bitte direkt öffnen, nicht über einen Vorschau-Link.');
+      render();
+    }
   }
 }
 
@@ -3222,6 +3260,7 @@ function onlineRestoreSession(){
   onlineSeenSeq = data.seen != null ? data.seen : -1;
   onlineLastId = null;
   onlineLogMark = 0; onlinePendingNotice = null;
+  onlinePeerSeen = false; onlineTries = 0; onlineOkCount = 0; onlineSeenIds = new Set();
   botColor = null;
   if(data.state) unpackState(data.state);
   if(onlinePollTimer) clearInterval(onlinePollTimer);
@@ -3273,6 +3312,7 @@ function onlineStart(code, color){
   onlineColor = color;
   onlineSeq = 0; onlineSeenSeq = -1; onlineLastId = null;
   onlineLogMark = 0; onlinePendingNotice = null;
+  onlinePeerSeen = false; onlineTries = 0; onlineOkCount = 0; onlineSeenIds = new Set();
   if(onlinePollTimer) clearInterval(onlinePollTimer);
   onlinePollTimer = setInterval(onlinePoll, 2000);
   botColor = null;                                  // Bot aus im Online-Spiel
